@@ -1,0 +1,120 @@
+{
+	"geode": "4.7.0",
+	"gd": {
+		"win": "2.2074",
+		"android": "2.2074",
+		"mac": "2.2074",
+		"ios": "2.2074"
+	},
+	"id": "kxtbit.geometron",
+	"name": "Geometron",
+	"version": "v1.0.0",
+	"developer": "kxtbit",
+	"description": "Lua scripting engine for Geometry Dash",
+	"dependencies": {
+		"geode.node-ids": ">=v1.20.0",
+		"geode.custom-keybinds": {
+			"version": ">=1.11.0",
+			"importance": "recommended"
+		}
+	},
+	"settings": {
+		"lua-max-execution-time": {
+			"type": "float",
+			"name": "Lua: Max Execution Time",
+			"description": "Controls the maximum amount of time Lua scripts can execute for in one frame before they are paused (so the game can render), specified in milliseconds",
+			"default": 0.5,
+			"min": 0,
+			"max": 100,
+			"controls": {
+				"arrows": true,
+				"arrow-step": 0.1,
+				"big-arrows": true,
+				"big-arrow-step": 1,
+				"slider": true,
+				"slider-step": 1,
+				"input": true
+			}
+		},
+		"lua-interrupt-resolution": {
+			"type": "int",
+			"name": "Lua: Interrupt Resolution",
+			"description": "Sets the intervals of Lua VM instructions after which the max execution time will be checked",
+			"default": 10000,
+			"min": 1,
+			"max": 100000,
+			"controls": {
+				"arrows": true,
+				"arrow-step": 1,
+				"big-arrows": true,
+				"big-arrow-step": 100,
+				"slider": true,
+				"slider-step": 10,
+				"input": true
+			}
+		},
+		"lua-uninterruptible-grace-time": {
+			"type": "float",
+			"name": "Lua: Uninterruptible Grace Time",
+			"description": "Controls the amount of time the Lua script is allowed to be in a non-yieldable context (e.g. a metamethod) before it is forcibly terminated",
+			"default": 500,
+			"min": 0,
+			"max": 500,
+			"controls": {
+				"arrows": true,
+				"arrow-step": 1,
+				"big-arrows": true,
+				"big-arrow-step": 10,
+				"slider": true,
+				"slider-step": 10,
+				"input": true
+			}
+		},
+		"console-font-size": {
+			"type": "float",
+			"name": "Console Font Size",
+			"description": "Controls the size of the font for the script console window, as a multiplier of the default size",
+			"default": 1,
+			"min": 0.25,
+			"max": 4,
+			"controls": {
+				"arrows": true,
+				"arrow-step": 0.125,
+				"slider": true,
+				"slider-step": 0.125,
+				"input": true
+			}
+		},
+		"console-line-height-multiplier": {
+			"type": "float",
+			"name": "Console Line Height Multiplier",
+			"description": "Controls the amount of separation between lines in the script console window, as a multiplier of the default size; values less than 1 may cause text to overlap",
+			"default": 1,
+			"min": 0.25,
+			"max": 4,
+			"controls": {
+				"arrows": true,
+				"arrow-step": 0.125,
+				"slider": true,
+				"slider-step": 0.125,
+				"input": true
+			}
+		}
+	},
+	"resources": {
+		"fonts": {
+			"AdwaitaMono-Regular": {
+				"path": "resources/fonts/AdwaitaMono-Regular.ttf",
+				"size": 56
+			}
+		},
+		"spritesheets": {
+			"GeometronButtons": [
+				"resources/button/*.png"
+			]
+		},
+		"files": [
+			"resources/fonts/AdwaitaMono_LICENSE.txt"
+		]
+	}
+}
