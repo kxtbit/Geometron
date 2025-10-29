@@ -43,6 +43,8 @@ class ScriptSelectorPopup : public Popup<EditorUI*> {
 
     bool setup(EditorUI* editor) override;
 
+    ~ScriptSelectorPopup() override;
+
     void update(float delta) override;
 
     void addConsoleLine(const std::string& line);

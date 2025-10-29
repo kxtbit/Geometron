@@ -179,32 +179,10 @@ sol::variadic_results ConsoleOutFile::flush(sol::this_state lua) {
     return sol::variadic_results();
 }
 
-//template<char... S>
-//using TemplateStringLiteral = std::integer_sequence<char, S...>;
-template<size_t L>
-struct FixedString {
-    static constexpr size_t len = L;
-
-    char v[L + 1] = {};
-    constexpr FixedString(const char (&s)[L + 1]) {
-        std::copy_n(s, L + 1, v);
-    }
-    template<size_t LA, size_t LB>
-    constexpr FixedString(FixedString<LA> a, FixedString<LB> b) {
-        std::copy_n(a.v, LA, v);
-        std::copy_n(b.v, LB + 1, v);
-    }
-};
-template<size_t L>
-FixedString(const char(&s)[L]) -> FixedString<L - 1>;
-template<size_t LA, size_t LB>
-FixedString(FixedString<LA>, FixedString<LB>) -> FixedString<LA + LB>;
-
 template<FixedString Name>
 int notImplementedFunction(lua_State* L) {
     constexpr FixedString suffix = " not implemented yet";
     constexpr FixedString str(Name, suffix);
-    //.constexpr auto str = TemplateStringLiteral<SizeAdd<decltype(Name), decltype(suffix)>::v>(Name, suffix);
     return luaL_error(L, str.v);
 }
 

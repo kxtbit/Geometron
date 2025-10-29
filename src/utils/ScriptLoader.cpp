@@ -3,19 +3,18 @@
 // ReSharper disable CppLocalVariableMayBeConst
 #include <Geode/Geode.hpp>
 
-#define SCRIPTLOADER_INIT
 #include "ScriptLoader.hpp"
 
 using namespace geode::prelude;
 
 ScriptLoader* ScriptLoader::instance;
-void ScriptLoader::init() {
+static void ScriptLoader_init() {
     auto saveDir = Mod::get()->getSaveDir();
-    instance = new ScriptLoader(saveDir / "scripts", saveDir / "workspace");
+    ScriptLoader::instance = new ScriptLoader(saveDir / "scripts", saveDir / "workspace");
 }
 
 $execute {
-    ScriptLoader::init();
+    ScriptLoader_init();
 }
 
 ScriptLoader::ScriptLoader(const std::filesystem::path& scriptDir, const std::filesystem::path& workDir) {
@@ -39,9 +38,9 @@ std::filesystem::path ScriptLoader::getWorkDir() {
 }
 
 std::vector<ScriptEntry> ScriptLoader::getScripts() {
-    if (loaded) return scripts;
+    //if (loaded) return scripts;
 
-    log::info("Loading scripts on first initialization...");
+    //log::info("Loading scripts on first initialization...");
 
     namespace fs = std::filesystem;
     if (!fs::exists(scriptDir) && !fs::create_directory(scriptDir)) {
@@ -52,6 +51,7 @@ std::vector<ScriptEntry> ScriptLoader::getScripts() {
         log::error("Failed to create work directory, script filesystem will not function");
     }
 
+    scripts.clear();
     for (auto entry : fs::directory_iterator(scriptDir)) {
         fs::path path = entry.path();
         log::debug("found file {}", path.filename().string());
@@ -88,7 +88,7 @@ std::optional<std::string> ScriptLoader::loadScript(const std::string& name) con
     data.resize(file.tellg());
     file.seekg(0, std::ios::beg);
 
-    if (!file.read(&data[0], data.size())) {
+    if (!file.read(data.data(), data.size())) {
         log::error("Failed to read script file {}: {}", name, strerror(errno));
         return std::nullopt;
     }

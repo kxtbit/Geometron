@@ -20,6 +20,7 @@ protected:
 
     explicit ScriptLoader(const std::filesystem::path& scriptDir, const std::filesystem::path& workDir);
 
+    friend void ScriptLoader_init();
 public:
     static ScriptLoader* get();
 
@@ -30,11 +31,6 @@ public:
     std::vector<ScriptEntry> getScripts();
 
     std::optional<std::string> loadScript(const std::string& name) const;
-
-#ifndef SCRIPTLOADER_INIT
-private:
-#endif
-    static void init();
 };
 
 #endif //GEOMETRON_SCRIPTLOADER_HPP

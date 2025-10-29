@@ -7,6 +7,7 @@
 #include "LuaEngine.hpp"
 
 #include "../../external/lua/upstream/lstate.h"
+#include "../utils/ScriptLoader.hpp"
 #include "../utils/Settings.hpp"
 
 using namespace std::string_literals;
@@ -185,6 +186,205 @@ void LuaEngine::stateSetup() {
         return lua_yield(L, 0);
     });
 
+    engineTable.set_function("readFile", [](lua_State* L) -> int {
+        namespace fs = std::filesystem;
+
+        auto str = checkStringView(L, 1);
+
+        fs::path path = str;
+        path = path.lexically_normal();
+
+        auto workDir = ScriptLoader::get()->getWorkDir();
+        auto realPath = workDir / path;
+
+        if (path.string().starts_with(".."s) || !realPath.is_absolute() || !fs::exists(realPath)) {
+            lua_pushnil(L);
+            pushConstantString<"file does not exist">(L);
+            return 2;
+        } else if (fs::is_directory(realPath)) {
+            lua_pushnil(L);
+            pushConstantString<"path refers to a directory">(L);
+        }
+        std::ifstream file(realPath, std::ios::binary);
+        if (file.fail() || !file.is_open()) {
+            lua_pushnil(L);
+            auto msg = fmt::format("failed to open file \"{}\": ", str, strerror(errno));
+            lua_pushlstring(L, msg.data(), msg.size());
+            return 2;
+        }
+        file.seekg(0, std::ios::end);
+        size_t size = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        luaL_Buffer buf;
+        luaL_buffinitsize(L, &buf, size);
+        if (!file.read(luaL_buffaddr(&buf), size)) {
+            lua_pushnil(L);
+            auto msg = fmt::format("failed to read file \"{}\": ", str, strerror(errno));
+            lua_pushlstring(L, msg.data(), msg.size());
+            return 2;
+        }
+        file.close();
+
+        luaL_pushresultsize(&buf, size);
+        return 1;
+    });
+    engineTable.set_function("writeFile", [](lua_State* L) -> int {
+        namespace fs = std::filesystem;
+
+        auto pathStr = checkStringView(L, 1);
+        auto data = checkStringView(L, 2);
+
+        fs::path path = pathStr;
+        path = path.lexically_normal();
+
+        auto workDir = ScriptLoader::get()->getWorkDir();
+        auto realPath = workDir / path;
+
+        if (path.string().starts_with(".."s) || !realPath.is_absolute()) {
+            lua_pushboolean(L, false);
+            pushConstantString<"invalid file path">(L);
+            return 2;
+        } else if (fs::is_directory(realPath)) {
+            lua_pushboolean(L, false);
+            pushConstantString<"path refers to a directory">(L);
+        }
+        if (path.has_parent_path() && !fs::is_directory(workDir / path.parent_path())) {
+            fs::create_directories(workDir / path.parent_path());
+        }
+        std::ofstream file(realPath, std::ios::binary);
+        if (file.fail() || !file.is_open()) {
+            lua_pushboolean(L, false);
+            auto msg = fmt::format("failed to open file \"{}\": ", pathStr, strerror(errno));
+            lua_pushlstring(L, msg.data(), msg.size());
+            return 2;
+        }
+
+        if (!file.write(data.data(), data.size())) {
+            lua_pushboolean(L, false);
+            auto msg = fmt::format("failed to write file \"{}\": ", pathStr, strerror(errno));
+            lua_pushlstring(L, msg.data(), msg.size());
+            return 2;
+        }
+        file.close();
+
+        lua_pushboolean(L, true);
+        return 1;
+    });
+    engineTable.set_function("removeFile", [](lua_State* L) -> int {
+        namespace fs = std::filesystem;
+
+        if (!lua_isnoneornil(L, 2) && !lua_isboolean(L, 2))
+            return luaL_typeerror(L, 2, "boolean");
+        auto str = checkStringView(L, 1);
+        bool recursive = lua_toboolean(L, 2);
+
+        fs::path path = str;
+        path = path.lexically_normal();
+
+        auto workDir = ScriptLoader::get()->getWorkDir();
+        auto realPath = workDir / path;
+
+        if (path.string().starts_with(".."s) || !realPath.is_absolute() || !fs::exists(realPath)) {
+            lua_pushboolean(L, false);
+            pushConstantString<"file does not exist">(L);
+            return 2;
+        }
+
+        if (fs::is_directory(realPath)) {
+            if (fs::is_empty(realPath)) {
+                fs::remove(realPath);
+            } else if (recursive) {
+                fs::remove_all(realPath);
+            } else {
+                lua_pushboolean(L, false);
+                pushConstantString<"directory is not empty; specify 2nd argument true to delete recursively">(L);
+                return 2;
+            }
+        }
+
+        lua_pushboolean(L, true);
+        return 1;
+    });
+    engineTable.set_function("makeDir", [](lua_State* L) -> int {
+        namespace fs = std::filesystem;
+
+        auto pathStr = checkStringView(L, 1);
+
+        fs::path path = pathStr;
+        path = path.lexically_normal();
+
+        auto workDir = ScriptLoader::get()->getWorkDir();
+        auto realPath = workDir / path;
+
+        if (path.string().starts_with(".."s) || !realPath.is_absolute()) {
+            lua_pushboolean(L, false);
+            pushConstantString<"invalid file path">(L);
+            return 2;
+        } else if (fs::exists(realPath)) {
+            lua_pushboolean(L, false);
+            pushConstantString<"file/directory already exists">(L);
+        }
+        fs::create_directories(realPath);
+
+        lua_pushboolean(L, true);
+        return 1;
+    });
+    engineTable.set_function("exists", [](lua_State* L) -> int {
+        namespace fs = std::filesystem;
+
+        auto pathStr = checkStringView(L, 1);
+
+        fs::path path = pathStr;
+        path = path.lexically_normal();
+
+        auto workDir = ScriptLoader::get()->getWorkDir();
+        auto realPath = workDir / path;
+
+        if (path.string().starts_with(".."s) || !realPath.is_absolute() || !fs::exists(realPath)) {
+            lua_pushboolean(L, false);
+            return 1;
+        }
+        if (fs::is_directory(realPath)) {
+            pushConstantString<"directory">(L);
+        } else {
+            pushConstantString<"file">(L);
+        }
+        return 1;
+    });
+    engineTable.set_function("listFiles", [](lua_State* L) -> int {
+        namespace fs = std::filesystem;
+
+        auto str = checkStringView(L, 1);
+
+        fs::path path = str;
+        path = path.lexically_normal();
+
+        auto workDir = ScriptLoader::get()->getWorkDir();
+        auto realPath = workDir / path;
+
+        if (path.string().starts_with(".."s) || !realPath.is_absolute() || !fs::exists(realPath)) {
+            lua_pushnil(L);
+            pushConstantString<"directory does not exist">(L);
+            return 2;
+        } else if (!fs::is_directory(realPath)) {
+            lua_pushnil(L);
+            pushConstantString<"path does not refer to a directory">(L);
+        }
+
+        lua_newtable(L);
+        int i = 1;
+        for (auto entry : fs::directory_iterator(realPath)) {
+            auto name = entry.path().filename().string();
+            if (fs::is_directory(entry.path())) name.append("/"s);
+            lua_pushlstring(L, name.data(), name.size());
+            lua_seti(L, -2, i);
+
+            i++;
+        }
+        return 1;
+    });
+
     lua["engine"] = engineTable;
 }
 void LuaEngine::editorSetup(EditorUI* editor) {
@@ -223,6 +423,19 @@ void LuaEngine::editorSetup(EditorUI* editor) {
     editorTable.set_function("loadObjects", [](std::string data, curengine engine, sol::this_state lua) {
         sol::state_view state(lua);
         return wrapArrayOfGameObjects(state, engine->editor->m_editorLayer->createObjectsFromString(data, true, true));
+    });
+    editorTable.set_function("saveObjects", [](sol::variadic_args args, curengine engine) {
+        auto editorLayer = engine->editor->m_editorLayer;
+        std::string ret;
+        //size of the smallest object string (default block at 0, 0) plus delimiter is 12
+        //so this should be a reasonable estimate for the minimum size needed
+        ret.reserve(12 * args.size());
+        for (sol::optional<GameObject*> object : args) {
+            if (!object.has_value()) continue;
+            ret.append(object.value()->getSaveString(editorLayer));
+            ret.append(";"s);
+        }
+        return ret;
     });
     editorTable.set_function("removeObjects", [](sol::variadic_args args, curengine engine) {
         auto editorLayer = engine->editor->m_editorLayer;
@@ -308,7 +521,6 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         auto p2 = LuaPoint {rect.getMaxX(), rect.getMaxY()};
         return std::tuple {p1, p2};
     });
-    log::debug("added editor properties 4");
 
     //sol::table gd = lua.create_table("gd");
 

@@ -53,6 +53,8 @@ class $modify(ConsoleKeyboardHook, CCKeyboardDispatcher) {
     }
 };
 
+inline static float FONT_SIZE_MULT = 0.6f;
+inline static std::string FONT_NAME = "geode.loader/mdFontMono.fnt";//"AdwaitaMono-Regular.fnt"_spr;
 bool ScriptSelectorPopup::setup(EditorUI* editor) {
     setUserObject("is-script-selector-popup", CCBool::create(true));
 
@@ -93,18 +95,22 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
     tabMenu->setLayout(RowLayout::create());
     m_mainLayer->addChild(tabMenu);
 
-
     scriptTab = CCMenu::create();
     scriptTab->setContentSize(popupSize);
+    scriptTab->setPosition(popupSize / 2);
     scriptTab->ignoreAnchorPointForPosition(false);
     scriptTab->setID("tab-container-scripts"_spr);
     consoleTab = CCMenu::create();
     consoleTab->setContentSize(popupSize);
+    consoleTab->setPosition(popupSize / 2);
     consoleTab->ignoreAnchorPointForPosition(false);
     consoleTab->setID("tab-container-console"_spr);
 
-    m_mainLayer->addChildAtPosition(scriptTab, Anchor::Center);
-    m_mainLayer->addChildAtPosition(consoleTab, Anchor::Center);
+    //both the script tab and the console tab have scrolling layers and use the scroll wheel
+    //if both are present at the same time the scrolling layers would fight for input causing weird issues
+    //so when one tab is active the other is removed, meaning both tabs should be manually retained
+    scriptTab->retain();
+    consoleTab->retain();
 
     setTab(lastTabIndex);
     {
@@ -176,8 +182,8 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
 
         consoleText = EnhancedTextPanel::create(consoleWindow,
             12 * Settings::consoleLineHeightMultiplier() * Settings::consoleFontSize(),
-            "AdwaitaMono-Regular.fnt"_spr,
-            0.75f * Settings::consoleFontSize());
+            FONT_NAME,
+            FONT_SIZE_MULT * Settings::consoleFontSize());
         consoleText->setAnchorPoint({0, 0});
         consoleText->ignoreAnchorPointForPosition(false);
         consoleText->setContentSize(consoleOutSize - CCSize(20, 20));
@@ -186,13 +192,14 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
         consoleWindow->addInnerChild(consoleText);
         consoleTab->addChildAtPosition(consoleWindow, Anchor::Center, consoleOutOffset);
 
-        consoleInput = TextInput::create(consoleInSize.width - 40, "", "AdwaitaMono-Regular.fnt"_spr);
+        consoleInput = TextInput::create(consoleInSize.width - 40, "", FONT_NAME);
         //i thought this was a hacky way to make the text in the text field left aligned
         //but then i realized this is literally what the one on the level search page does
         consoleInput->getInputNode()->setAnchorPoint({0.5, 0});
         consoleInput->getInputNode()->ignoreAnchorPointForPosition(false);
         consoleInput->getInputNode()->m_textField->setAnchorPoint({0, 0.5});
         consoleInput->getInputNode()->m_textLabel->setAnchorPoint({0, 0.5});
+        consoleInput->getInputNode()->setMaxLabelScale(FONT_SIZE_MULT * Settings::consoleFontSize());
         consoleInput->setID("console-input"_spr);
 
         consoleSendButton = CCMenuItemSpriteExtra::create(
@@ -215,6 +222,7 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
 
     loadingIndicator = LoadingCircleSprite::create(1.0f);
     loadingIndicator->setScale(0.45f);
+    loadingIndicator->setID("script-loading-indicator");
 
     auto cancelButtonSprite = CCSprite::createWithSpriteFrameName("GJ_stopEditorBtn_001.png");
     if (!cancelButtonSprite) {
@@ -223,9 +231,11 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
     }
     cancelButtonSprite->setScale(0.7f);
     cancelButton = CCMenuItemSpriteExtra::create(cancelButtonSprite, this, menu_selector(ScriptSelectorPopup::onClickCancel));
+    cancelButton->setID("script-cancel-button");
 
     statusLabel = CCLabelBMFont::create("", "chatFont.fnt");
     statusLabel->setAnchorPoint({0, 0.5});
+    statusLabel->setID("script-status-label");
 
     updateScriptStatus();
 
@@ -236,6 +246,12 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
     //scheduleUpdate();
     return true;
 }
+
+ScriptSelectorPopup::~ScriptSelectorPopup() {
+    scriptTab->release();
+    consoleTab->release();
+}
+
 
 void ScriptSelectorPopup::update(float delta) {
     //updateScriptStatus();
@@ -286,31 +302,14 @@ void ScriptSelectorPopup::updateScriptStatus(bool force) {
 }
 
 void ScriptSelectorPopup::addConsoleLine(const std::string& line) {
-    /*auto lineLabel = CCLabelBMFont::create(line.c_str(),
-        "chatFont.fnt",
-        (consoleBG->getContentWidth() - 20) / 0.75f,
-        kCCTextAlignmentLeft);
-    lineLabel->setScale(0.75f);
-    lineLabel->setAnchorPoint({0, 0});
-    lineLabel->ignoreAnchorPointForPosition(false);
-    lineLabel->setPosition(0, 0);*/
 
     float logHeight = (consoleText->lineCount() + 1) * consoleText->getLineHeight();
-    //log::info("logheight is {}", logHeight);
-    //log::info("innerheight is {}", consoleWindow->innerHeight());
     if (logHeight > consoleWindow->innerHeight()) {
-        //log::info("will grow");
         float newHeight = logHeight;
         consoleWindow->resizeInner(newHeight);
         consoleText->setContentHeight(newHeight);
     }
 
-    /*CCArrayExt<CCLabelBMFont*> labels = consoleWindow->getInnerChildren();
-    for (auto label : labels) {
-        label->setPositionY(label->getPositionY() + consoleLineHeight);
-    }
-
-    consoleWindow->addInnerChild(lineLabel);*/
     consoleText->addLine(line);
 }
 void ScriptSelectorPopup::sendConsoleInput(CCObject*) {
@@ -337,12 +336,12 @@ void ScriptSelectorPopup::setTab(int tab) const {
     }
     switch (tab) {
         case 0:
-            scriptTab->setVisible(true);
-            consoleTab->setVisible(false);
+            m_mainLayer->addChild(scriptTab);
+            consoleTab->removeFromParentAndCleanup(false);
             break;
         case 1:
-            scriptTab->setVisible(false);
-            consoleTab->setVisible(true);
+            scriptTab->removeFromParentAndCleanup(false);
+            m_mainLayer->addChild(consoleTab);
             break;
         default: break;
     }

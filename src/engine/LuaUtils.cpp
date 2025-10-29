@@ -33,7 +33,6 @@ void updateObjectPosition(EditorUI* self, GameObject* object) {
     layer->removeObjectFromSection(object);
     layer->addToSection(object);
 
-    //TODO: handle m_alphaTriggersChanged, m_pulseTriggersChanged, m_spawnTriggersChanged, etc
     bool speedObjectsUpdated = false;
     switch (object->m_objectID) {
         default: break;
@@ -105,7 +104,7 @@ void addProtectedMT(sol::state_view& lua, std::string_view name) {
     //log::info("protect MT {}", name);
     lua_pushlstring(L, name.data(), name.size());
     lua_rawget(L, LUA_REGISTRYINDEX);
-    lua_pushlstring(L, "__metatable", 11);
+    pushConstantString<"__metatable">(L);
     lua_pushlstring(L, protectedMTMessage.data(), protectedMTMessage.size());
     lua_rawset(L, -3);
     lua_pop(L, 1);

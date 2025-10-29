@@ -8,7 +8,7 @@ else()
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(Geometron VERSION 1.0.0)
+project(Geometron VERSION 0.1.0)
 
 # Add all source files inside src (recursively)
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
@@ -32,7 +32,10 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES}
         src/utils/Settings.hpp
         src/utils/ResizingCircularBuffer.cpp
         src/utils/ResizingCircularBuffer.hpp
-        src/utils/Keybinds.cpp)
+        src/utils/Keybinds.cpp
+        src/engine/bindings/properties_GameObjects.cpp
+        src/engine/bindings/properties.hpp
+        src/engine/bindings/properties_triggers.cpp)
 
 if (NOT DEFINED ENV{GEODE_SDK})
     message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")

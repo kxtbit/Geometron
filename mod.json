@@ -103,18 +103,12 @@
 	},
 	"resources": {
 		"fonts": {
-			"AdwaitaMono-Regular": {
-				"path": "resources/fonts/AdwaitaMono-Regular.ttf",
-				"size": 56
-			}
+
 		},
 		"spritesheets": {
 			"GeometronButtons": [
 				"resources/button/*.png"
 			]
-		},
-		"files": [
-			"resources/fonts/AdwaitaMono_LICENSE.txt"
-		]
+		}
 	}
 }

@@ -7,19 +7,15 @@
 
 using namespace geode::prelude;
 
-class ScrollingWindow : public ListView {
-    CCMenu* inner = nullptr;
+class ScrollingWindow : public ScrollLayer {
+    ScrollingWindow(CCSize const& size, bool scrollWheelEnabled, bool vertical);
 
-    bool init(CCSize size);
-
-    void setupList(float) override;
-    TableViewCell* getListCell(char const* key) override;
 public:
     void addInnerChild(auto&&... args) {
-        return inner->addChild(std::forward<decltype(args)>(args)...);
+        return m_contentLayer->addChild(std::forward<decltype(args)>(args)...);
     }
     void addInnerChildAtPosition(auto&&... args) {
-        return inner->addChildAtPosition(std::forward<decltype(args)>(args)...);
+        return m_contentLayer->addChildAtPosition(std::forward<decltype(args)>(args)...);
     }
     unsigned int getInnerChildrenCount();
     CCArray* getInnerChildren();
@@ -29,7 +25,7 @@ public:
     float innerHeight();
     float scrollHeight();
 
-    static ScrollingWindow* create(CCSize size);
+    static ScrollingWindow* create(CCSize const& size, bool scrollWheelEnabled = true, bool vertical = true);
 };
 
 #endif //GEOMETRON_SCROLLINGWINDOW_HPP
