@@ -5,6 +5,7 @@
 #include <Geode/Geode.hpp>
 
 #include "LuaEngine.hpp"
+#include "LuaUtils.hpp"
 
 using namespace geode::prelude;
 

@@ -8,7 +8,7 @@
 	},
 	"id": "kxtbit.geometron",
 	"name": "Geometron",
-	"version": "v1.0.0",
+	"version": "v0.1.0",
 	"developer": "kxtbit",
 	"description": "Lua scripting engine for Geometry Dash",
 	"dependencies": {
@@ -23,7 +23,7 @@
 			"type": "float",
 			"name": "Lua: Max Execution Time",
 			"description": "Controls the maximum amount of time Lua scripts can execute for in one frame before they are paused (so the game can render), specified in milliseconds",
-			"default": 0.5,
+			"default": 2,
 			"min": 0,
 			"max": 100,
 			"controls": {
@@ -70,9 +70,15 @@
 				"input": true
 			}
 		},
+		"lua-allow-debug-library": {
+			"type": "bool",
+			"name": "Lua: Allow Debug Library",
+			"description": "Controls or not to allow access to the debug.* library for Lua scripts, mostly useful for developing Geometron itself; do not enable unless you completely trust the scripts you are running, as this makes it incredibly easy to escape the sandbox!",
+			"default": false
+		},
 		"console-font-size": {
 			"type": "float",
-			"name": "Console Font Size",
+			"name": "Console: Font Size",
 			"description": "Controls the size of the font for the script console window, as a multiplier of the default size",
 			"default": 1,
 			"min": 0.25,
@@ -87,7 +93,7 @@
 		},
 		"console-line-height-multiplier": {
 			"type": "float",
-			"name": "Console Line Height Multiplier",
+			"name": "Console: Line Height Multiplier",
 			"description": "Controls the amount of separation between lines in the script console window, as a multiplier of the default size; values less than 1 may cause text to overlap",
 			"default": 1,
 			"min": 0.25,
@@ -99,6 +105,12 @@
 				"slider-step": 0.125,
 				"input": true
 			}
+		},
+		"console-auto-focus-input": {
+			"type": "bool",
+			"name": "Console: Auto-Focus Input",
+			"description": "If enabled, whenever the script window is opened while the console tab is selected, the console input text box will automatically be focused.",
+			"default": false
 		}
 	},
 	"resources": {

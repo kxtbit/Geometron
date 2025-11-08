@@ -3,22 +3,52 @@
 #ifndef GEOMETRON_SETTINGS_HPP
 #define GEOMETRON_SETTINGS_HPP
 
-class Settings {
-    static float _luaMaxExecutionTime;
-    static int _luaInterruptResolution;
-    static float _luaUninterruptibleGraceTime;
+#ifdef SETTINGS_IMPL
+#include <Geode/Geode.hpp>
+using namespace geode::prelude;
 
-    static float _consoleFontSize;
-    static float _consoleLineHeightMultiplier;
-
-    friend void settingsInit();
-public:
-    static float luaMaxExecutionTime() {return _luaMaxExecutionTime;}
-    static int luaInterruptResolution() {return _luaInterruptResolution;}
-    static float luaUninterruptibleGraceTime() {return _luaUninterruptibleGraceTime;}
-
-    static float consoleFontSize() {return _consoleFontSize;}
-    static float consoleLineHeightMultiplier() {return _consoleLineHeightMultiplier;}
+template<auto& S, class T = std::remove_reference_t<decltype(S)>>
+static constexpr auto SettingChanged = [](T val) {
+    S = val;
 };
+
+static constexpr std::string unCamelCase(std::string str) {
+    std::string out;
+    out.reserve(str.size());
+    for (const char c : str) {
+        char lower = std::tolower(c);
+        if (lower == c) {
+            out.append(1, c);
+        } else {
+            out.append(1, '-');
+            out.append(1, lower);
+        }
+    }
+    return out;
+}
+
+#define DEFINE_SETTING(type, name) \
+    static type _##name; \
+    namespace Settings { type name() {return _##name;} }; \
+    $execute { \
+        Mod* M = Mod::get(); \
+        std::string settingName = unCamelCase(#name); \
+        _##name = M->getSettingValue<type>(settingName); \
+        listenForSettingChanges(settingName, SettingChanged<_##name>, M); \
+    }
+
+#else
+#define DEFINE_SETTING(type, name) \
+    namespace Settings { type name(); }
+#endif
+
+DEFINE_SETTING(float, luaMaxExecutionTime);
+DEFINE_SETTING(int, luaInterruptResolution);
+DEFINE_SETTING(float, luaUninterruptibleGraceTime);
+DEFINE_SETTING(bool, luaAllowDebugLibrary);
+
+DEFINE_SETTING(float, consoleFontSize);
+DEFINE_SETTING(float, consoleLineHeightMultiplier);
+DEFINE_SETTING(bool, consoleAutoFocusInput);
 
 #endif //GEOMETRON_SETTINGS_HPP

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "../engine/LuaEngine.hpp"
+#include "../utils/FontUtils.hpp"
 
 using namespace std::string_literals;
 
@@ -26,58 +27,6 @@ bool EnhancedTextPanel::init(ScrollingWindow* newWindow, float newLineHeight, st
 
     scheduleUpdate();
     return true;
-}
-
-static float getKerning(CCBMFontConfiguration* fontData, utf16char left, utf16char right) {
-    unsigned int key = (left << 16) | (right & 0xffff);
-    if (fontData->m_pKerningDictionary) {
-        tCCKerningHashElement* element;
-        HASH_FIND_INT(fontData->m_pKerningDictionary, &key, element);
-        if (element) return static_cast<float>(element->amount) / CC_CONTENT_SCALE_FACTOR();
-    }
-    return 0;
-}
-static ccBMFontDef* getCharDef(CCBMFontConfiguration* fontData, utf16char c) {
-    //by the way i hate these hash tables they're so cursed
-    unsigned int key = c;
-    tCCFontDefHashElement* element;
-    HASH_FIND_INT(fontData->m_pFontDefDictionary, &key, element);
-    return element ? &element->fontDef : nullptr;
-}
-std::vector<size_t> EnhancedTextPanel::wrapString(const std::string& str, float maxWidth) {
-    //log::info("wrapping string \"{}\" to max width {}", escapeString(str), maxWidth);
-    auto ccwstr = cc_utf8_to_utf16(str.c_str());
-    utf16string wstr = ccwstr;
-    CC_SAFE_DELETE_ARRAY(ccwstr);
-
-    std::vector<size_t> wraps;
-    float x = 0;
-
-    utf16char cPrev = -1;
-    for (size_t i = 0; i < wstr.size(); i++) {
-        utf16char c = wstr.at(i);
-        //log::info("processing char {} (\"{}\"), x = {}", c, static_cast<char>(c), x);
-        if (c != ' ' && !fontData->m_pCharacterSet->contains(c)) continue;
-
-        auto charDef = getCharDef(fontData, c);
-        if (!charDef) continue;
-        float advance = static_cast<float>(charDef->xAdvance) / CC_CONTENT_SCALE_FACTOR();
-        float kerning = getKerning(fontData, cPrev, c);
-
-        //log::info("advance = {}, kerning = {}, total displacement = {}", advance, kerning, advance + kerning);
-
-        float displacement = advance + kerning;
-        if (x + displacement > maxWidth) {
-            //log::info("wrapping at {}", i);
-            wraps.push_back(i);
-            x = 0;
-        }
-        x += displacement;
-
-        cPrev = c;
-    }
-
-    return wraps;
 }
 
 void EnhancedTextPanel::setLabelPosition(CCLabelBMFont* label, CCPoint pos) {
@@ -225,7 +174,7 @@ void EnhancedTextPanel::updateLine(int line) {
 
 void EnhancedTextPanel::addLine(const std::string& line) {
     //log::info("adding line {}", escapeString(line));
-    auto wraps = wrapString(line, window->getContentWidth() / fontScale);
+    auto wraps = wrapString(line, window->getContentWidth() / fontScale, fontData);
 
     int lineCount = 0;
     size_t start = 0;
@@ -249,7 +198,7 @@ void EnhancedTextPanel::setLine(int i, const std::string& line) {
     if (i < 0 || i >= lines.size()) return;
 
     if (i == lines.size() - 1) {
-        auto wraps = wrapString(line, window->getContentWidth() / fontScale);
+        auto wraps = wrapString(line, window->getContentWidth() / fontScale, fontData);
         if (wraps.size() < 1) goto nowrap;
         lines[i] = line.substr(0, wraps[0]);
         updateLine(i);

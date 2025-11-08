@@ -219,9 +219,31 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
         consoleTab->addChildAtPosition(consoleSendButton, Anchor::Center, consoleInOffset + CCPoint((consoleInSize.width - 40) / 2.0f + 3, 0));
         consoleTab->addChildAtPosition(consoleInput, Anchor::Center, consoleInOffset - CCPoint(20, 0));
     }
+    if (lastTabIndex == 1 && Settings::consoleAutoFocusInput()) {
+        Loader::get()->queueInMainThread([consoleInput = Ref(consoleInput)]() {
+            if (auto bindsResult = BindManagerV2::getBindsFor("script-menu"_spr); bindsResult.isOk()) {
+                auto dispatcher = CCDirector::sharedDirector()->getKeyboardDispatcher();
+                for (auto bind : bindsResult.unwrap()) {
+                    if (auto keybind = dynamic_cast<Keybind*>(bind.data())) {
+                        //someone please tell me if there is a better way to do this without requiring
+                        //the custom keybinds mod be present
+                        class Keybind_public : public Bind {
+                        public:
+                            enumKeyCodes m_key;
+                            Modifier m_modifiers;
+                        };
+                        auto key = reinterpret_cast<Keybind_public*>(keybind)->m_key;
+                        dispatcher->dispatchKeyboardMSG(key, false, false);
+                    }
+                }
+            }
+            consoleInput->focus();
+        });
+    }
 
     loadingIndicator = LoadingCircleSprite::create(1.0f);
     loadingIndicator->setScale(0.45f);
+    loadingIndicator->setZOrder(1);
     loadingIndicator->setID("script-loading-indicator");
 
     auto cancelButtonSprite = CCSprite::createWithSpriteFrameName("GJ_stopEditorBtn_001.png");
@@ -406,6 +428,7 @@ void ScriptSelectorPopup::onClickRun(CCObject* object) {
                 /*popup = FLAlertLayer::create("Error",
                     fmt::format("The script {} was canceled.", name),
                     "OK");*/
+                return;
                 break;
             case ENGINE_LOCKED:
             case ENGINE_IN_USE:
@@ -440,6 +463,11 @@ void ScriptSelectorPopup::onConsoleText(const std::string& text) {
 }
 void ScriptSelectorPopup::onConsoleLine(const std::string& line) {
     addConsoleLine(line);
+}
+
+void ScriptSelectorPopup::onKeybindRelease() {
+    if (lastTabIndex == 1 && Settings::consoleAutoFocusInput())
+        consoleInput->focus();
 }
 
 void ScriptSelectorPopup::show() {

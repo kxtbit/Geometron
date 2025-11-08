@@ -35,7 +35,18 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES}
         src/utils/Keybinds.cpp
         src/engine/bindings/properties_GameObjects.cpp
         src/engine/bindings/properties.hpp
-        src/engine/bindings/properties_triggers.cpp)
+        src/engine/bindings/properties_triggers.cpp
+        src/hooks/TrackedGameObject.cpp
+        src/hooks/TrackedGameObject.hpp
+        src/hooks/TrackingEditorLayer.cpp
+        src/hooks/TrackingEditorLayer.hpp
+        src/utils/FontUtils.cpp
+        src/utils/FontUtils.hpp
+        src/utils/types/GPoint.hpp
+        src/utils/types/GTransform.hpp
+        src/engine/LuaUtils.hpp
+        src/engine/LuaSmartArray.cpp
+        src/engine/LuaModules.hpp)
 
 if (NOT DEFINED ENV{GEODE_SDK})
     message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")
@@ -50,7 +61,7 @@ target_link_libraries(${PROJECT_NAME} lua::lib)
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_precompile_headers(${PROJECT_NAME} PRIVATE include/sol/sol.hpp)
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE SOL_ALL_SAFETIES_ON=1)
+target_compile_definitions(${PROJECT_NAME} PUBLIC SOL_ALL_SAFETIES_ON=1)
 
 # Set up dependencies, resources, and link Geode.
 setup_geode_mod(${PROJECT_NAME})

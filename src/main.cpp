@@ -31,7 +31,18 @@ class $modify(GeometronEditorUI, EditorUI) {
 
         using namespace keybinds;
         this->addEventListener<InvokeBindFilterV2>([this](InvokeBindEventV2* event) {
-            if (!event->isDown()) return ListenerResult::Propagate;
+            if (!event->isDown()) {
+                //there is a setting for Geometron to automatically focus the console input box on opening script popup
+                //but focusing the text box immediately for some reason confuses the keybind system
+                //for example if the script window is bound to Ctrl+B, focusing the text box would make the keybind
+                //system think B is always pressed, so any time you pressed Ctrl the script window would open again
+                //instead, focus the text box when the keybind is released instead of pressed
+                //TODO: this still doesn't work if Ctrl is released first
+                //if (auto popup = CCScene::get()->getChildByType<ScriptSelectorPopup>(0))
+                //    popup->onKeybindRelease();
+
+                return ListenerResult::Propagate;
+            }
 
             auto scene = CCScene::get();
             CCArrayExt<CCNode*> children = scene->getChildren();

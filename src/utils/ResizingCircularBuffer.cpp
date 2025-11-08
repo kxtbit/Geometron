@@ -5,7 +5,8 @@
 
 #include <Geode/Geode.hpp>
 
-#include "../engine/LuaEngine.hpp"
+#include "FontUtils.hpp"
+
 using namespace geode::prelude;
 
 namespace _ResizingCircularBuffer_base {

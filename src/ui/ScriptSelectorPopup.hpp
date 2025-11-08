@@ -59,12 +59,13 @@ class ScriptSelectorPopup : public Popup<EditorUI*> {
 
     friend class ConsoleKeyboardHook;
 public:
-
     static ScriptSelectorPopup* create(EditorUI* editor);
 
     void updateScriptStatus(bool force = false);
     void onConsoleText(const std::string& text);
     void onConsoleLine(const std::string& line);
+
+    void onKeybindRelease();
 
     void show() override;
     void onClose(CCObject*) override;

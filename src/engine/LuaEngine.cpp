@@ -5,6 +5,8 @@
 #include <Geode/Geode.hpp>
 
 #include "LuaEngine.hpp"
+#include "LuaUtils.hpp"
+#include "LuaModules.hpp"
 
 #include "../../external/lua/upstream/lstate.h"
 #include "../utils/ScriptLoader.hpp"
@@ -29,7 +31,7 @@ void LuaEngine::init() {
     if (!tryLock())
         log::warn("The Lua engine is already locked before initialization, things might break!");
 
-    stateSetup();
+    //stateSetup();
     consoleLines.push_back("");
 
     class Updater : public CCObject {
@@ -50,32 +52,6 @@ void LuaEngine::init() {
     unlock();
 }
 
-template<int (*Continuation)(lua_State*, int, lua_KContext)>
-static int doPostResume(lua_State* L, lua_State* co, int status, int nCoRets) {
-    //based on luaB_coresume from lcorolib.c
-    LuaEngine* engine = LuaEngine::get(L);
-    if (status == LUA_YIELD && engine->executionStatus.type == YIELDING) {
-        //YIELDING means the whole Lua engine is supposed to be suspended
-        //so we yield again to bubble the yield up to the main thread
-        if (nCoRets > 0)
-            luaL_error(L, "invalid engine yield, should have no parameters");
-        return lua_yieldk(L, 0, reinterpret_cast<lua_KContext>(co), Continuation);
-    } else if (status == LUA_OK || status == LUA_YIELD) {
-        if (!lua_checkstack(L, nCoRets + 1)) {
-            lua_pop(co, nCoRets); //not enough space to move the results, so just destroy them
-            lua_pushboolean(L, false);
-            lua_pushliteral(L, "too many results to resume");
-            return 2;
-        }
-        lua_pushboolean(L, true);
-        lua_xmove(co, L, nCoRets); //move the results
-        return nCoRets + 1;
-    } else {
-        lua_pushboolean(L, false);
-        lua_xmove(co, L, 1); //move the error message
-        return 2;
-    }
-}
 template<int (*ReturnHandler)(lua_State*, int)>
 static int coroutineResumeContinuation(lua_State* L, int, lua_KContext ctx) {
     //believe me i would love not to reinterpret_cast here but we are in C land :/
@@ -87,7 +63,33 @@ static int coroutineResumeContinuation(lua_State* L, int, lua_KContext ctx) {
 
     int nCoRets;
     int status = lua_resume(co, L, 0, &nCoRets);
-    return ReturnHandler(L, doPostResume<&coroutineResumeContinuation<ReturnHandler>>(L, co, status, nCoRets));
+    return doPostResume<ReturnHandler>(L, co, status, nCoRets);
+}
+template<int (*ReturnHandler)(lua_State*, int)>
+static int doPostResume(lua_State* L, lua_State* co, int status, int nCoRets) {
+    //based on luaB_coresume from lcorolib.c
+    LuaEngine* engine = LuaEngine::get(L);
+    if (status == LUA_YIELD && engine->executionStatus.type == YIELDING) {
+        //YIELDING means the whole Lua engine is supposed to be suspended
+        //so we yield again to bubble the yield up to the main thread
+        if (nCoRets > 0)
+            luaL_error(L, "invalid engine yield, should have no parameters");
+        return lua_yieldk(L, 0, reinterpret_cast<lua_KContext>(co), &coroutineResumeContinuation<ReturnHandler>);
+    } else if (status == LUA_OK || status == LUA_YIELD) {
+        if (!lua_checkstack(L, nCoRets + 1)) {
+            lua_pop(co, nCoRets); //not enough space to move the results, so just destroy them
+            lua_pushboolean(L, false);
+            lua_pushliteral(L, "too many results to resume");
+            return ReturnHandler(L, 2);
+        }
+        lua_pushboolean(L, true);
+        lua_xmove(co, L, nCoRets); //move the results
+        return ReturnHandler(L, nCoRets + 1);
+    } else {
+        lua_pushboolean(L, false);
+        lua_xmove(co, L, 1); //move the error message
+        return ReturnHandler(L, 2);
+    }
 }
 static int customCoroutineResume(lua_State* L) {
     //based on luaB_coresume from lcorolib.c
@@ -106,7 +108,7 @@ static int customCoroutineResume(lua_State* L) {
     int nCoRets;
     int status = lua_resume(co, L, nCoArgs, &nCoRets);
     //having a lambda as a template parameter is so cursed
-    return doPostResume<&coroutineResumeContinuation<[](lua_State*, int r) { return r; }>>(L, co, status, nCoRets);
+    return doPostResume<[](lua_State*, int r) { return r; }>(L, co, status, nCoRets);
 }
 static int coroutineWrapperReturn(lua_State* L, int nPostResumeRets) {
     bool success = lua_toboolean(L, -nPostResumeRets);
@@ -129,7 +131,7 @@ static int coroutineWrapper(lua_State* L) {
     lua_xmove(L, co, nArgs); //move arguments to coroutine
     int nCoRets;
     int status = lua_resume(co, L, nArgs, &nCoRets);
-    return doPostResume<&coroutineResumeContinuation<&coroutineWrapperReturn>>(L, co, status, nCoRets);
+    return doPostResume<&coroutineWrapperReturn>(L, co, status, nCoRets);
 }
 static int customCoroutineWrap(lua_State* L) {
     //based on luaB_cowrap from lcorolib.c
@@ -170,6 +172,12 @@ void LuaEngine::stateSetup() {
     lua["os"]["remove"] = sol::nil;
     lua["os"]["rename"] = sol::nil;
     lua["os"]["tmpname"] = sol::nil;
+    lua["os"]["setlocale"] = sol::nil;
+
+    if (!Settings::luaAllowDebugLibrary()) {
+        auto newDebug = lua.create_table_with("traceback", lua["debug"]["traceback"]);
+        lua["debug"] = newDebug;
+    }
 
     lua["coroutine"]["resume"] = sol::as_function(&customCoroutineResume);
     lua["coroutine"]["wrap"] = sol::as_function(&customCoroutineWrap);
@@ -399,85 +407,173 @@ void LuaEngine::editorSetup(EditorUI* editor) {
     log::debug("adding editor API");
     sol::table editorTable = lua.create_table("editor");
     editorTable.set_function("getSelectedObjects", [](curengine engine, sol::this_state lua) {
-        sol::state_view state(lua);
-        return wrapArrayOfGameObjects(state, engine->editor->getSelectedObjects());
+        auto editor = engine->editor;
+        if (editor->m_selectedObject != nullptr) {
+            return sol::table::create_with<int, sol::object>(lua.lua_state(), 1, wrapGameObject(lua, editor->m_selectedObject));
+        }
+        return wrapArrayOfGameObjects(lua, editor->m_selectedObjects);
+    });
+    editorTable.set_function("getSelectedObject", [](curengine engine, sol::this_state lua) -> sol::object {
+        GameObject* selected = engine->editor->m_selectedObject;
+        if (selected == nullptr) return sol::nil;
+        return wrapGameObject(lua, selected);
+    });
+    editorTable.set_function("setSelectedObjects", [](sol::lua_table objects, curengine engine) {
+        engine->editor->deselectAll();
+        CCArrayExt<GameObject> array;
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
+            array.push_back(object.value());
+        }
+        engine->editor->selectObjects(array.inner(), true);
+        updateEditorSelection(engine->editor);
+    });
+    editorTable.set_function("setSelectedObject", [](GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        engine->editor->deselectAll();
+        CCArrayExt<GameObject> array;
+        array.push_back(object);
+        engine->editor->selectObjects(array.inner(), true);
+        updateEditorSelection(engine->editor);
     });
     editorTable.set_function("getAllObjects", [](curengine engine, sol::this_state lua) {
         sol::state_view state(lua);
         return wrapArrayOfGameObjects(state, engine->editor->m_editorLayer->m_objects);
     });
-    editorTable.set_function("createObject", [](int id, curengine engine) {
-        auto editorLayer = engine->editor->m_editorLayer;
-        auto object = GameObject::createWithKey(id);//engine->editor->createObject(id, {0, 90});
-        if (id == 3032) { //keyframe object
-            //set the keyframe group to -1 so the editor won't try to add it to any existing keyframe anims
-            static_cast<KeyframeGameObject*>(object)->m_keyframeGroup = -1;
-        }
-        object->setVisible(false);
-        object->customSetup();
-        object->saveActiveColors();
-        editorLayer->addToSection(object);
-        editorLayer->addSpecial(object);
+    editorTable.set_function("createObject", [](int id, curengine engine) -> sol::object {
+        auto object = safeCreateObject(engine->editor, id, {0, 0});
+        if (object == nullptr) return sol::nil;
+
         return wrapGameObject(engine->lua, object);
     });
     editorTable.set_function("loadObjects", [](std::string data, curengine engine, sol::this_state lua) {
         sol::state_view state(lua);
         return wrapArrayOfGameObjects(state, engine->editor->m_editorLayer->createObjectsFromString(data, true, true));
     });
-    editorTable.set_function("saveObjects", [](sol::variadic_args args, curengine engine) {
+    editorTable.set_function("saveObjects", [](sol::lua_table objects, curengine engine) {
         auto editorLayer = engine->editor->m_editorLayer;
         std::string ret;
         //size of the smallest object string (default block at 0, 0) plus delimiter is 12
         //so this should be a reasonable estimate for the minimum size needed
-        ret.reserve(12 * args.size());
-        for (sol::optional<GameObject*> object : args) {
-            if (!object.has_value()) continue;
+        ret.reserve(12 * objects.size());
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
             ret.append(object.value()->getSaveString(editorLayer));
             ret.append(";"s);
         }
         return ret;
     });
-    editorTable.set_function("removeObjects", [](sol::variadic_args args, curengine engine) {
-        auto editorLayer = engine->editor->m_editorLayer;
-        for (sol::optional<GameObject*> object : args) {
-            if (!object.has_value()) continue;
-            editorLayer->removeObject(object.value(), true); //true so it doesn't create an undo command for each one
+    editorTable.set_function("saveObject", [](GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        std::string ret = object->getSaveString(engine->editor->m_editorLayer);
+        return ret;
+    });
+    editorTable.set_function("removeObjects", [](sol::lua_table objects, curengine engine) {
+        auto editor = engine->editor;
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
+            safeDeleteObject(editor, object.value());
         }
+    });
+    editorTable.set_function("removeObject", [](GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        safeDeleteObject(engine->editor, object);
     });
     log::debug("added editor properties 1");
 
-    editorTable.set_function("removeParentGroups", [](sol::variadic_args args, curengine engine) {
-        auto editorLayer = engine->editor->m_editorLayer;
-        for (sol::optional<int> group : args) {
-            if (!group.has_value()) continue;
-            editorLayer->removeGroupParent(group.value());
-        }
+    editorTable.set_function("getGroupParent", [](int group, curengine engine, sol::this_state lua) -> sol::object {
+        auto object = engine->editor->m_editorLayer->getGroupParent(group);
+        return (object != nullptr) ? wrapGameObject(lua, object) : sol::nil;
     });
-    editorTable.set_function("linkObjects", [](sol::variadic_args args, curengine engine) {
-        CCArrayExt<GameObject*> array = CCArray::createWithCapacity(args.size());
-        for (sol::optional<GameObject*> object : args) {
-            if (!object.has_value()) continue;
+    editorTable.set_function("setGroupParent", [](int group, GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+
+        auto editorLayer = engine->editor->m_editorLayer;
+        if (object->addToGroup(group) != 0) {
+            editorLayer->addToGroup(object, group, false);
+            editorLayer->setGroupParent(object, group);
+            return true;
+        }
+        return false;
+    });
+    editorTable.set_function("removeGroupParent", [](int group, curengine engine) {
+        engine->editor->m_editorLayer->removeGroupParent(group);
+    });
+    editorTable.set_function("getGroupsParentOf", [](GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+
+        auto output = sol::state_view(lua).create_table(object->m_groupCount);
+        CCArrayExt<CCInteger*> parentGroups =
+            static_cast<CCArray*>(engine->editor->m_editorLayer->m_parentGroupIDs->objectForKey(object->m_uniqueID));
+        for (int i = 0; i < parentGroups.size(); i++) {
+            output[i] = parentGroups[i]->getValue();
+        }
+        return output;
+    });
+    editorTable.set_function("linkObjects", [](sol::lua_table objects, curengine engine) {
+        CCArrayExt<GameObject*> array = CCArray::createWithCapacity(objects.size());
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
             array.push_back(object.value());
         }
+        if (array.size() < 2) return;
         engine->editor->m_editorLayer->groupStickyObjects(array.inner());
     });
-    editorTable.set_function("unlinkObjects", [](sol::variadic_args args, curengine engine) {
-        CCArrayExt<GameObject*> array = CCArray::createWithCapacity(args.size());
-        for (sol::optional<GameObject*> object : args) {
-            if (!object.has_value()) continue;
+    editorTable.set_function("unlinkObjects", [](sol::lua_table objects, curengine engine) {
+        CCArrayExt<GameObject*> array = CCArray::createWithCapacity(objects.size());
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
             array.push_back(object.value());
         }
         engine->editor->m_editorLayer->ungroupStickyObjects(array.inner());
     });
+    editorTable.set_function("getAnyLinkedObjects", [](sol::lua_table objects, curengine engine, sol::this_state lua) {
+        auto editorLayer = engine->editor->m_editorLayer;
+
+        std::unordered_set<GameObject*> set;
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
+
+            CCArrayExt<GameObject*> linkedObjects = static_cast<CCArray*>(editorLayer->m_linkedGroupDict->objectForKey(object.value()->m_linkedGroup));
+            if (linkedObjects.inner() == nullptr) {
+                set.insert(object.value());
+            } else {
+                set.insert(linkedObjects.begin(), linkedObjects.end());
+            }
+        }
+        auto ret = sol::table::create(lua.lua_state(), set.size());
+        for (int i = 1; GameObject* object : set) {
+            ret[i] = wrapGameObject(lua, object);
+            i++;
+        }
+        return ret;
+    });
+    editorTable.set_function("getLinkedObjects", [](sol::variadic_args args, GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        auto editorLayer = engine->editor->m_editorLayer;
+        CCArrayExt<GameObject*> linkedObjects = static_cast<CCArray*>(editorLayer->m_linkedGroupDict->objectForKey(object->m_linkedGroup));
+        if (linkedObjects.inner() == nullptr) {
+            return sol::table::create_with<int, sol::object>(lua.lua_state(), 1, args[0].as<sol::object>());
+        }
+        return wrapArrayOfGameObjects(lua, linkedObjects.inner());
+    });
     log::debug("added editor properties 2");
 
-    editorTable.set_function("linkKeyframes", [](sol::variadic_args args, curengine engine) {
+    editorTable.set_function("linkKeyframes", [](sol::lua_table objects, curengine engine) {
         auto editorLayer = engine->editor->m_editorLayer;
         int keyframeGroup = editorLayer->m_keyframeGroup++;
         int keyframeIndex = 0;
-        CCArrayExt<GameObject*> keyframes = CCArray::createWithCapacity(args.size());
-        for (sol::optional<GameObject*> object : args) {
-            if (!object.has_value()) continue;
+        CCArrayExt<GameObject*> keyframes = CCArray::createWithCapacity(objects.size());
+        for (int i = 1; i <= objects.size(); i++) {
+            sol::optional<GameObject*> object = objects[i];
+            if (!object.has_value() || !gameObjectExists(object.value())) continue;
+
             auto keyframe = typeinfo_cast<KeyframeGameObject*>(object.value());
             if (!keyframe) continue;
             keyframe->m_keyframeGroup = keyframeGroup;
@@ -485,6 +581,20 @@ void LuaEngine::editorSetup(EditorUI* editor) {
             keyframes.push_back(keyframe);
         }
         editorLayer->m_keyframeGroups->setObject(keyframes.inner(), keyframeGroup);
+    });
+    editorTable.set_function("getLinkedKeyframes", [](sol::variadic_args args, GameObject* object, curengine engine, sol::this_state lua) -> sol::table {
+        checkObjectExists(lua, object);
+        auto keyframe = typeinfo_cast<KeyframeGameObject*>(object);
+        if (keyframe == nullptr) {
+            luaL_error(lua, "object is not a subclass of KeyframeGameObject");
+            return nullptr; //line should never execute
+        }
+        auto editorLayer = engine->editor->m_editorLayer;
+        CCArrayExt<GameObject*> linkedKeyframes = static_cast<CCArray*>(editorLayer->m_keyframeGroups->objectForKey(keyframe->m_keyframeGroup));
+        if (linkedKeyframes.inner() == nullptr) {
+            return sol::table::create_with<int, sol::object>(lua.lua_state(), 1, args[0].as<sol::object>());
+        }
+        return wrapArrayOfGameObjects(lua, linkedKeyframes.inner());
     });
     editorTable.set_function("unlinkKeyframeGroup", [](int keyframeGroup, curengine engine) {
         auto editorLayer = engine->editor->m_editorLayer;
@@ -514,12 +624,48 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         return engine->editor->m_editorLayer->getNextFreeAreaEffectID(nullptr);
     });
 
-    editorTable.set_function("getObjectRect", [](GameObject* object, curengine engine) {
+    editorTable.set_function("getObjectRect", [](GameObject* object, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
         //according to decompilation the last two parameters do nothing
         auto rect = engine->editor->m_editorLayer->getObjectRect(object, false, false);
-        auto p1 = LuaPoint {rect.getMinX(), rect.getMinY()};
-        auto p2 = LuaPoint {rect.getMaxX(), rect.getMaxY()};
+        auto p1 = GPoint {rect.getMinX(), rect.getMinY() - 90};
+        auto p2 = GPoint {rect.getMaxX(), rect.getMaxY() - 90};
         return std::tuple {p1, p2};
+    });
+
+    editorTable.set_function("getGridSize", [](curengine engine) {
+        return engine->editor->m_editorLayer->m_drawGridLayer->m_gridSize;
+    });
+    // editorTable.set_function("setGridSize", [](float size, curengine engine) {
+    //     engine->editor->m_editorLayer->m_drawGridLayer->m_gridSize = size;
+    // });
+
+    editorTable.set_function("getViewCenter", [](curengine engine) {
+        return getEditorViewCenter(engine->editor);
+    });
+    editorTable.set_function("getViewGridCenter", [](curengine engine) {
+        auto editor = engine->editor;
+
+        auto viewCenter = getEditorViewCenter(editor);
+        auto gridSize = editor->m_editorLayer->m_drawGridLayer->m_gridSize;
+        return GPoint {
+            (std::floor(viewCenter.x / gridSize) + 0.5) * gridSize,
+            (std::floor(viewCenter.y / gridSize) + 0.5) * gridSize};
+    });
+    editorTable.set_function("setViewCenter", [](GPoint pos, curengine engine) {
+        setEditorViewCenter(engine->editor, pos);
+    });
+
+    editorTable.set_function("getLayer", [](curengine engine) {
+        return engine->editor->m_editorLayer->m_currentLayer;
+    });
+    editorTable.set_function("setLayer", [](short layer, curengine engine) {
+        auto editor = engine->editor;
+
+        if (layer < 0) layer = -1;
+        editor->m_editorLayer->m_currentLayer = layer;
+        //why is the function to update the editor layer text called "updateGroupIDLabel"?????
+        editor->updateGroupIDLabel();
     });
 
     //sol::table gd = lua.create_table("gd");
@@ -698,22 +844,26 @@ void LuaEngine::tryResume() {
     if (!fastIsExecuting) return;
     if (!tryLock()) return;
 
+    lua_State* L = lua.lua_state();
+    if (executionStatus.asyncData.isAsync && executionStatus.asyncData.isCancelled && executionStatus.asyncData.isCancelled()) {
+        executionStatus.asyncData.postResult({SCRIPT_CANCELED});
+
+        lua_settop(L, 0);
+        executionStatus.type = STOPPED;
+        executionStatus.asyncData.isAsync = false;
+        updateExecutionStatus();
+        fastIsExecuting = false;
+
+        updateScriptStatusForConsole();
+
+        stateSetup();
+
+        unlock();
+        return;
+    }
+
     if (executionStatus.type == YIELDING) {
         //log::info("try resume script, yield type is {}", static_cast<int>(executionStatus.yieldType));
-        lua_State* L = lua.lua_state();
-        if (executionStatus.asyncData.isAsync && executionStatus.asyncData.isCancelled && executionStatus.asyncData.isCancelled()) {
-            executionStatus.asyncData.postResult({SCRIPT_CANCELED});
-
-            lua_settop(L, 0);
-            executionStatus.type = STOPPED;
-            executionStatus.asyncData.isAsync = false;
-            updateExecutionStatus();
-            fastIsExecuting = false;
-
-            updateScriptStatusForConsole();
-
-            stateSetup();
-        }
         bool shouldResume = true;
         switch (executionStatus.yieldType) {
             case SLEEPING:
@@ -876,7 +1026,9 @@ void LuaEngine::forceReset() {
         executionStatus.asyncData.isAsync = false;
         fastIsExecuting = false;
 
-        stateSetup();
+        //stateSetup();
+        lua = nullptr;
+        editor = nullptr;
     }
 
     if (locked) unlock();
@@ -894,6 +1046,7 @@ ScriptResult LuaEngine::execute(EditorUI* editor, const std::string& code, const
         return ScriptResult {ENGINE_IN_USE};
     }
 
+    stateSetup();
     editorSetup(editor);
     log::debug("editor setup complete");
 
@@ -941,11 +1094,33 @@ ScriptResult LuaEngine::execute(EditorUI* editor, const std::string& code, const
 
     cleanup:
     //reset environment and clear reference to editor
-    stateSetup();
+    lua = nullptr;
+    editor = nullptr;
     log::debug("state cleared");
     unlock:
     unlock();
     return ret;
+}
+static int errorHandlingWrapper(lua_State* L) {
+    int nArgs = lua_gettop(L);
+    //error handling function
+    lua_pushcfunction(L, [](lua_State* L) -> int {
+        luaL_tolstring(L, 1, nullptr);
+        pushConstantString<"\n">(L);
+        luaL_traceback(L, L, nullptr, 1);
+        lua_concat(L, 3);
+        return 1;
+    });
+    lua_pushvalue(L, lua_upvalueindex(1)); //function to call
+    lua_rotate(L, 1, 2); //rotate by 2 so the above values go to the bottom of the stack
+    constexpr lua_KFunction cont = [](lua_State* L, int status, lua_KContext ctx) -> int {
+        if (status == LUA_OK || status == LUA_YIELD) {
+            return lua_gettop(L);
+        } else {
+            return lua_error(L);
+        }
+    };
+    return cont(L, lua_pcallk(L, nArgs, LUA_MULTRET, 1, 0, cont), 0);
 }
 ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, const std::string& name) {
     log::debug("executing script {} async", name);
@@ -956,6 +1131,7 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
         return ScriptTask::immediate({ENGINE_IN_USE});
     }
 
+    stateSetup();
     editorSetup(editor);
     log::debug("editor setup complete");
 
@@ -974,6 +1150,7 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
             goto unlock; //no need to reset state as it has not been used
         }
         log::debug("compiled");
+        lua_pushcclosure(L, &errorHandlingWrapper, 1);
 
         executionStatus.scriptName = name;
         executionStatus.asyncData.isAsync = true;
@@ -1027,7 +1204,8 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
     fastIsExecuting = false;
     updateExecutionStatus();
     //reset environment and clear reference to editor
-    stateSetup();
+    lua = nullptr;
+    editor = nullptr;
     log::debug("state cleared");
 
     unlock:

@@ -1,14 +1,23 @@
 #include "properties.hpp"
 
 void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::usertype<GameObject> gameObjectType) {
+#define BASE_PROPERTY(name) gameObjectType[#name] = &GameObject::m_##name
+#define BASE_RENAME_PROPERTY(newName, oldName) gameObjectType[#newName] = &GameObject::m_##oldName
+#define BASE_READONLY_PROPERTY(name) gameObjectType[#name] = sol::readonly(&GameObject::m_##name)
+#define BASE_READONLY_RENAME_PROPERTY(newName, oldName) gameObjectType[#newName] = sol::readonly(&GameObject::m_##oldName)
+#define SUBCLASS_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassProperty<&type::m_##name>()
+#define SUBCLASS_READONLY_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassReadOnlyProperty<&type::m_##name>()
+#define SUBCLASS_READONLY_POINT_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassReadOnlyPointProperty<&type::m_##name>()
+#define SUBCLASS_HOOKED_PROPERTY(type, name, hook) gameObjectType[#name] = gameObjectSubclassProperty<&type::m_##name, hook>()
+
     { //other object properties
         gameObjectType["isFlipX"] = sol::property(&GameObject::isFlipX, &GameObject::setFlipX);
         gameObjectType["isFlipY"] = sol::property(&GameObject::isFlipY, &GameObject::setFlipY);
-        gameObjectType["customColorType"] = &GameObject::m_customColorType;
-        gameObjectType["mainColorKeyIndex"] = &GameObject::m_mainColorKeyIndex;
-        gameObjectType["detailColorKeyIndex"] = &GameObject::m_detailColorKeyIndex;
-        gameObjectType["editorLayer"] = &GameObject::m_editorLayer;
-        gameObjectType["editorLayer2"] = &GameObject::m_editorLayer2;
+        BASE_RENAME_PROPERTY(singleColorType, customColorType);
+        BASE_PROPERTY(mainColorKeyIndex);
+        BASE_PROPERTY(detailColorKeyIndex);
+        BASE_PROPERTY(editorLayer);
+        BASE_PROPERTY(editorLayer2);
         gameObjectType["zLayer"] = sol::property([](GameObject* object) {
             return object->m_zLayer;
         }, [](GameObject* object, ZLayer layer) {
@@ -17,55 +26,62 @@ void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::user
                 object->m_shouldUpdateColorSprite = true;
             }
         });
-        gameObjectType["zFixedZLayer"] = sol::readonly(&GameObject::m_zFixedZLayer);
+        BASE_READONLY_RENAME_PROPERTY(fixedZLayer, zFixedZLayer);
         gameObjectType["zOrder"] = sol::property([](GameObject* object) {
             return object->m_zOrder;
         }, [](GameObject* object, int order) {
             object->m_zOrder = order;
             object->m_shouldUpdateColorSprite = true;
         });
-        gameObjectType["classType"] = sol::readonly(&GameObject::m_classType);
-        log::debug("added GameObject properties 3");
+        BASE_READONLY_PROPERTY(classType);
     }
     { //extra object properties
-        gameObjectType["isDontEnter"] = &GameObject::m_isDontEnter;
-        gameObjectType["isDontFade"] = &GameObject::m_isDontFade;
-        gameObjectType["hasNoEffects"] = &GameObject::m_hasNoEffects;
-        gameObjectType["hasGroupParent"] = &GameObject::m_hasGroupParent;
-        gameObjectType["hasAreaParent"] = &GameObject::m_hasAreaParent;
-        gameObjectType["isDontBoostX"] = &GameObject::m_isDontBoostX;
-        gameObjectType["isDontBoostY"] = &GameObject::m_isDontBoostY;
-        gameObjectType["isHighDetail"] = &GameObject::m_isHighDetail;
+        BASE_PROPERTY(isDontEnter);
+        BASE_PROPERTY(isDontFade);
+        BASE_RENAME_PROPERTY(isNoEffects, hasNoEffects);
+        BASE_RENAME_PROPERTY(isGroupParent, hasGroupParent);
+        BASE_RENAME_PROPERTY(isAreaParent, hasAreaParent);
+        BASE_PROPERTY(isDontBoostX);
+        BASE_PROPERTY(isDontBoostY);
+        BASE_PROPERTY(isHighDetail);
         gameObjectType["isNoTouch"] = sol::property(&GameObject::m_isNoTouch, [](GameObject* object, bool noTouch, curengine engine) {
+            bool exists = gameObjectExists(object);
+
             auto editorLayer = engine->editor->m_editorLayer;
             if (object->m_isNoTouch == noTouch) return;
 
-            editorLayer->removeObjectFromSection(object);
+            if (exists)
+                editorLayer->removeObjectFromSection(object);
             object->m_isNoTouch = noTouch;
             object->setType(object->m_savedObjectType);
             object->saveActiveColors(); //saveActiveColors also updates m_objectType to Decoration if notouch
-            editorLayer->addToSection(object);
+            if (exists)
+                editorLayer->addToSection(object);
         });
-        gameObjectType["isPassable"] = &GameObject::m_isPassable;
-        gameObjectType["isHide"] = &GameObject::m_isHide;
-        gameObjectType["isNonStickX"] = &GameObject::m_isNonStickX;
-        gameObjectType["isNonStickY"] = &GameObject::m_isNonStickY;
-        gameObjectType["isExtraSticky"] = &GameObject::m_isExtraSticky;
-        gameObjectType["hasExtendedCollision"] = sol::property(&GameObject::m_hasExtendedCollision, [](GameObject* object, bool noTouch, curengine engine) {
+        BASE_PROPERTY(isPassable);
+        BASE_PROPERTY(isHide);
+        BASE_PROPERTY(isNonStickX);
+        BASE_PROPERTY(isNonStickY);
+        BASE_PROPERTY(isExtraSticky);
+        BASE_PROPERTY(isScaleStick);
+        gameObjectType["isExtendedCollision"] = sol::property(&GameObject::m_hasExtendedCollision, [](GameObject* object, bool noTouch, curengine engine) {
+            bool exists = gameObjectExists(object);
+
             auto editorLayer = engine->editor->m_editorLayer;
             if (object->m_hasExtendedCollision == noTouch) return;
 
-            editorLayer->removeObjectFromSection(object);
+            if (exists)
+                editorLayer->removeObjectFromSection(object);
             object->m_hasExtendedCollision = noTouch;
-            editorLayer->addToSection(object);
+            if (exists)
+                editorLayer->addToSection(object);
         });
-        gameObjectType["isIceBlock"] = &GameObject::m_isIceBlock;
-        gameObjectType["isGripSlope"] = &GameObject::m_isGripSlope;
-        gameObjectType["hasNoGlow"] = &GameObject::m_hasNoGlow;
-        gameObjectType["hasNoParticles"] = &GameObject::m_hasNoParticles;
-        gameObjectType["hasNoAudioScale"] = &GameObject::m_hasNoAudioScale;
-        gameObjectType["enterChannel"] = &GameObject::m_enterChannel;
-        log::debug("added GameObject properties 4");
+        BASE_PROPERTY(isIceBlock);
+        BASE_PROPERTY(isGripSlope);
+        BASE_RENAME_PROPERTY(isNoGlow, hasNoGlow);
+        BASE_RENAME_PROPERTY(isNoParticles, hasNoParticles);
+        BASE_RENAME_PROPERTY(isNoAudioScale, hasNoAudioScale);
+        BASE_PROPERTY(enterChannel);
     }
     { //EnhancedGameObject
         WriteHook(EnhancedGameObject, rotatingObjectHook, {
@@ -75,64 +91,103 @@ void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::user
             object->setupAnimationVariables();
         });
 
-        gameObjectType["poweredOn"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_poweredOn>();
-        gameObjectType["state"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_state>();
-        gameObjectType["animationRandomizedStartValue"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_animationRandomizedStartValue>();
-        gameObjectType["animationStart"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_animationStart>();
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, poweredOn);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, state);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, animationRandomizedStartValue);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, animationStart);
         //gameObjectType["unk540"] = gameObjectSubclassProperty(lua, &EnhancedGameObject::m_unk540);
         //gameObjectType["unk544"] = gameObjectSubclassProperty(lua, &EnhancedGameObject::m_unk544);
         //gameObjectType["unk548"] = gameObjectSubclassProperty(lua, &EnhancedGameObject::m_unk548);
-        gameObjectType["randomFrameTime"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_randomFrameTime>();
-        gameObjectType["visible"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_visible>();
-        gameObjectType["shouldNotHideAnimFreeze"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_shouldNotHideAnimFreeze>();
-        gameObjectType["usesSpecialAnimation"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_usesSpecialAnimation>();
-        gameObjectType["frameTime"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_frameTime>();
-        gameObjectType["frames"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_frames>();
-        gameObjectType["hasCustomAnimation"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_hasCustomAnimation>();
-        gameObjectType["hasCustomRotation"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_hasCustomRotation>();
-        gameObjectType["disableRotation"] = gameObjectSubclassProperty<&EnhancedGameObject::m_disableRotation, rotatingObjectHook::f>();
-        gameObjectType["rotationSpeed"] = gameObjectSubclassProperty<&EnhancedGameObject::m_rotationSpeed, rotatingObjectHook::f>();
-        gameObjectType["rotationAngle"] = gameObjectSubclassProperty<&EnhancedGameObject::m_rotationAngle, rotatingObjectHook::f>();
-        gameObjectType["rotationDelta"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_rotationDelta>();
-        gameObjectType["rotationAnimationSpeed"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_rotationAnimationSpeed>();
-        gameObjectType["animationRandomizedStart"] = gameObjectSubclassProperty<&EnhancedGameObject::m_animationRandomizedStart, animatingObjectHook::f>();
-        gameObjectType["animationSpeed"] = gameObjectSubclassProperty<&EnhancedGameObject::m_animationSpeed, animatingObjectHook::f>();
-        gameObjectType["animationShouldUseSpeed"] = gameObjectSubclassProperty<&EnhancedGameObject::m_animationShouldUseSpeed, animatingObjectHook::f>();
-        gameObjectType["animateOnTrigger"] = gameObjectSubclassProperty<&EnhancedGameObject::m_animateOnTrigger, animatingObjectHook::f>();
-        gameObjectType["disableDelayedLoop"] = gameObjectSubclassProperty<&EnhancedGameObject::m_disableDelayedLoop, animatingObjectHook::f>();
-        gameObjectType["disableAnimShine"] = gameObjectSubclassProperty<&EnhancedGameObject::m_disableAnimShine, animatingObjectHook::f>();
-        gameObjectType["singleFrame"] = gameObjectSubclassProperty<&EnhancedGameObject::m_singleFrame, animatingObjectHook::f>();
-        gameObjectType["animationOffset"] = gameObjectSubclassProperty<&EnhancedGameObject::m_animationOffset, animatingObjectHook::f>();
-        gameObjectType["animationTriggered"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_animationTriggered>();
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, randomFrameTime);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, visible);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, shouldNotHideAnimFreeze);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, usesSpecialAnimation);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, frameTime);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, frames);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, hasCustomAnimation);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, hasCustomRotation);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, disableRotation, rotatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, rotationSpeed, rotatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, rotationAngle, rotatingObjectHook::f);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, rotationDelta);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, rotationAnimationSpeed);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, animationRandomizedStart, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, animationSpeed, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, animationShouldUseSpeed, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, animateOnTrigger, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, disableDelayedLoop, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, disableAnimShine, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, singleFrame, animatingObjectHook::f);
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, animationOffset, animatingObjectHook::f);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, animationTriggered);
         //gameObjectType["unkAnimationInt"] = gameObjectSubclassProperty(lua, &EnhancedGameObject::m_unkAnimationInt);
         //gameObjectType["maybeAnimationVariableXInt"] = gameObjectSubclassProperty(lua, &EnhancedGameObject::m_maybeAnimationVariableXInt);
         //gameObjectType["maybeAnimationVariableYInt"] = gameObjectSubclassProperty(lua, &EnhancedGameObject::m_maybeAnimationVariableYInt);
-        gameObjectType["animateOnlyWhenActive"] = gameObjectSubclassProperty<&EnhancedGameObject::m_animateOnlyWhenActive, animatingObjectHook::f>();
-        gameObjectType["isNoMultiActivate"] = gameObjectSubclassProperty<&EnhancedGameObject::m_isNoMultiActivate>();
-        gameObjectType["isMultiActivate"] = gameObjectSubclassProperty<&EnhancedGameObject::m_isMultiActivate>();
-        gameObjectType["activated"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_activated>();
-        gameObjectType["activatedByPlayer1"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_activatedByPlayer1>();
-        gameObjectType["activatedByPlayer2"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_activatedByPlayer2>();
-        gameObjectType["hasUniqueCoin"] = gameObjectSubclassReadOnlyProperty<&EnhancedGameObject::m_hasUniqueCoin>();
-        log::debug("added GameObject properties 5");
+        SUBCLASS_HOOKED_PROPERTY(EnhancedGameObject, animateOnlyWhenActive, animatingObjectHook::f);
+        SUBCLASS_PROPERTY(EnhancedGameObject, isNoMultiActivate);
+        SUBCLASS_PROPERTY(EnhancedGameObject, isMultiActivate);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, activated);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, activatedByPlayer1);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, activatedByPlayer2);
+        SUBCLASS_READONLY_PROPERTY(EnhancedGameObject, hasUniqueCoin);
     }
 
     { //orb parameters
-        gameObjectType["claimTouch"] = gameObjectSubclassProperty<&RingObject::m_claimTouch>();
-        gameObjectType["isSpawnOnly"] = gameObjectSubclassProperty<&RingObject::m_isSpawnOnly>();
+        SUBCLASS_PROPERTY(RingObject, claimTouch);
+        SUBCLASS_PROPERTY(RingObject, isSpawnOnly);
 
-        gameObjectType["dashSpeed"] = gameObjectSubclassProperty<&DashRingObject::m_dashSpeed>();
-        gameObjectType["endBoost"] = gameObjectSubclassProperty<&DashRingObject::m_endBoost>();
-        gameObjectType["maxDuration"] = gameObjectSubclassProperty<&DashRingObject::m_maxDuration>();
-        gameObjectType["allowCollide"] = gameObjectSubclassProperty<&DashRingObject::m_allowCollide>();
-        gameObjectType["stopSlide"] = gameObjectSubclassProperty<&DashRingObject::m_stopSlide>();
-        log::debug("added GameObject properties 6");
+        SUBCLASS_PROPERTY(DashRingObject, dashSpeed);
+        SUBCLASS_PROPERTY(DashRingObject, endBoost);
+        SUBCLASS_PROPERTY(DashRingObject, maxDuration);
+        SUBCLASS_PROPERTY(DashRingObject, allowCollide);
+        SUBCLASS_PROPERTY(DashRingObject, stopSlide);
     }
 
-    WriteHook(TextGameObject, textHook, {
-        object->updateTextObject(object->m_text, false);
-    });
+    { //teleport portals
+        gameObjectType["orangePortal"] = sol::property([](GameObject* object, sol::this_state lua) {
+            return wrapGameObject(lua, subclassCast<TeleportPortalObject>(object, lua)->m_orangePortal);
+        }, [](GameObject* object, GameObject* value, sol::this_state lua) {
+            subclassCast<TeleportPortalObject>(object, lua)->m_orangePortal =
+                subclassCast<TeleportPortalObject>(value, lua);
+        });
+        SUBCLASS_READONLY_PROPERTY(TeleportPortalObject, isYellowPortal);
+        SUBCLASS_PROPERTY(TeleportPortalObject, teleportYOffset);
+        SUBCLASS_PROPERTY(TeleportPortalObject, teleportEase);
+        SUBCLASS_PROPERTY(TeleportPortalObject, staticForceEnabled);
+        SUBCLASS_PROPERTY(TeleportPortalObject, staticForce);
+        SUBCLASS_PROPERTY(TeleportPortalObject, redirectForceEnabled);
+        SUBCLASS_PROPERTY(TeleportPortalObject, redirectForceMod);
+        SUBCLASS_PROPERTY(TeleportPortalObject, redirectForceMin);
+        SUBCLASS_PROPERTY(TeleportPortalObject, redirectForceMax);
+        SUBCLASS_PROPERTY(TeleportPortalObject, saveOffset);
+        SUBCLASS_PROPERTY(TeleportPortalObject, ignoreX);
+        SUBCLASS_PROPERTY(TeleportPortalObject, ignoreY);
+        SUBCLASS_PROPERTY(TeleportPortalObject, gravityMode);
+        SUBCLASS_PROPERTY(TeleportPortalObject, staticForceAdditive);
+        SUBCLASS_PROPERTY(TeleportPortalObject, instantCamera);
+        SUBCLASS_PROPERTY(TeleportPortalObject, snapGround);
+        SUBCLASS_PROPERTY(TeleportPortalObject, redirectDash);
+        SUBCLASS_READONLY_POINT_PROPERTY(TeleportPortalObject, teleportPosition);
+    }
 
-    gameObjectType["text"] = gameObjectSubclassProperty<&TextGameObject::m_text, textHook::f>();
-    gameObjectType["kerning"] = gameObjectSubclassProperty<&TextGameObject::m_kerning>();
+    gameObjectType["text"] = sol::property([](GameObject* object, sol::this_state lua) {
+        return subclassCast<TextGameObject>(object, lua)->m_text;
+    }, [](GameObject* object, std::string str, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        subclassCast<TextGameObject>(object, lua)->updateTextObject(str, false);
+    });
+    gameObjectType["kerning"] = sol::property([](GameObject* object, sol::this_state lua) {
+        return subclassCast<TextGameObject>(object, lua)->m_kerning;
+    }, [](GameObject* object, int kerning, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        auto text = subclassCast<TextGameObject>(object, lua);
+        text->updateTextKerning(kerning);
+        text->updateTextObject(text->m_text, false);
+    });
+    gameObjectType.set_function("splitText", [](GameObject* object, sol::optional<bool> deleteOriginal, curengine engine, sol::this_state lua) {
+        checkObjectExists(lua, object);
+        auto objs = splitText(engine->editor, subclassCast<TextGameObject>(object, lua));
+        if (deleteOriginal.value_or(true)) safeDeleteObject(engine->editor, object);
+        return wrapArrayOfGameObjects(lua, objs.inner());
+    });
 }

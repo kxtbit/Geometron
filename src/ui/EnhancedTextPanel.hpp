@@ -23,8 +23,6 @@ class EnhancedTextPanel : public CCNode {
 
     bool init(ScrollingWindow* newWindow, float newLineHeight, std::string newFontName, float newFontScale);
 
-    std::vector<size_t> wrapString(const std::string& str, float maxWidth);
-
     void setLabelPosition(CCLabelBMFont* label, CCPoint pos);
     void setLabelText(CCLabelBMFont* label, const std::string& text);
 
