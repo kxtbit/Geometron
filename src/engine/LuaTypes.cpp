@@ -71,6 +71,18 @@ static GPoint getObjectPosition(GameObject* object) {
 static void setObjectPosition(GameObject* object, GPoint pos) {
     object->setPosition({static_cast<float>(pos.x), static_cast<float>(pos.y + 90.0f)});
 }
+static void transformObject(GameObject* object, const GTransform& transform, EditorUI* editor) {
+    auto pos = transform.pos();
+    auto scale = transform.scale();
+    auto rot = -transform.degXY();
+
+    setObjectPosition(object, pos);
+    updateObjectPosition(editor, object);
+    object->setRotationY(rot.x);
+    object->setRotationX(rot.y);
+    object->updateCustomScaleX(scale.x);
+    object->updateCustomScaleY(scale.y);
+}
 void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
     auto pointType = lua.new_usertype<GPoint>("point", sol::constructors<GPoint(double, double)>(),
         "x", &GPoint::x,
@@ -89,6 +101,7 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
             static_cast<GPoint (GPoint::*)(double) const>(&GPoint::operator/),
             static_cast<GPoint (*)(double, GPoint)>(&operator/)),
         sol::meta_function::unary_minus, static_cast<GPoint (GPoint::*)() const>(&GPoint::operator-),
+        sol::meta_function::equal_to, &GPoint::operator==,
         sol::meta_function::to_string, &GPoint::operator std::string);
     setupImmutableMT(lua, lua["point"], pointType);
 
@@ -103,7 +116,9 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
         "scaling", sol::overload(
             static_cast<GTransform (*)(double, double)>(&GTransform::scaling),
             static_cast<GTransform (*)(const GPoint&)>(&GTransform::scaling)),
-        "shear", &GTransform::shear,
+        "shear", sol::overload(
+            static_cast<GTransform (*)(double, double)>(&GTransform::shear),
+            static_cast<GTransform (*)(const GPoint&)>(&GTransform::shear)),
         "rotation", &GTransform::rotation,
         "dualRotation", &GTransform::dualRotation,
         "fromVectors", &GTransform::fromVectors,
@@ -119,8 +134,13 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
             static_cast<GTransform (GTransform::*)(const GTransform&) const>(&GTransform::apply)),
         "applyVector", &GTransform::applyVector,
         "chain", &GTransform::chain,
+        "around", sol::overload(
+            static_cast<GTransform (GTransform::*)(const GTransform&) const>(&GTransform::around),
+            static_cast<GTransform (GTransform::*)(const GPoint&) const>(&GTransform::around)),
         //metatable operations
         sol::meta_function::addition, &GTransform::operator+,
+        sol::meta_function::subtraction, &GTransform::operator-,
+        sol::meta_function::equal_to, &GTransform::operator==,
         sol::meta_function::to_string, &GTransform::operator std::string);
     setupImmutableMT(lua, lua["transform"], transformType);
 
@@ -222,16 +242,7 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
     gameObjectType["transform"] = sol::property([](GameObject* object) {
         return GTransform::ofObject(object);
     }, [](GameObject* object, const GTransform& transform, curengine engine) {
-        auto pos = transform.pos();
-        auto scale = transform.scale();
-        auto rot = -transform.degXY();
-
-        setObjectPosition(object, pos);
-        updateObjectPosition(engine->editor, object);
-        object->setRotationY(rot.x);
-        object->setRotationX(rot.y);
-        object->updateCustomScaleX(scale.x);
-        object->updateCustomScaleY(scale.y);
+        transformObject(object, transform, engine->editor);
     });
     gameObjectType["baseColorID"] = sol::property([](GameObject* object, sol::this_state lua) -> sol::object {
         auto color = object->m_baseColor;
@@ -391,6 +402,9 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
         object->updateCustomScaleX(vectorX.magnitude() / 30.0);
         object->setRotationX((HALF_PI - std::atan2(vectorY.y, vectorY.x)) / RADIANS_OVER_DEGREES);
         object->updateCustomScaleY(vectorY.magnitude() / 30.0);
+    });
+    gameObjectType.set_function("transformBy", [](GameObject* object, const GTransform& transform, curengine engine) {
+        transformObject(object, transform.apply(GTransform::ofObject(object)), engine->editor);
     });
 
     addPropertiesForGameObjects(lua, self, gameObjectType);

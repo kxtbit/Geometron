@@ -404,6 +404,8 @@ void LuaEngine::editorSetup(EditorUI* editor) {
     log::debug("adding usertypes");
     luaAddUsertypes(lua, editor);
 
+    luaAddSmartArray(lua);
+
     log::debug("adding editor API");
     sol::table editorTable = lua.create_table("editor");
     editorTable.set_function("getSelectedObjects", [](curengine engine, sol::this_state lua) {
@@ -422,7 +424,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         engine->editor->deselectAll();
         CCArrayExt<GameObject> array;
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
             array.push_back(object.value());
         }
@@ -458,7 +460,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         //so this should be a reasonable estimate for the minimum size needed
         ret.reserve(12 * objects.size());
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
             ret.append(object.value()->getSaveString(editorLayer));
             ret.append(";"s);
@@ -473,7 +475,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
     editorTable.set_function("removeObjects", [](sol::lua_table objects, curengine engine) {
         auto editor = engine->editor;
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
             safeDeleteObject(editor, object.value());
         }
@@ -516,7 +518,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
     editorTable.set_function("linkObjects", [](sol::lua_table objects, curengine engine) {
         CCArrayExt<GameObject*> array = CCArray::createWithCapacity(objects.size());
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
             array.push_back(object.value());
         }
@@ -526,7 +528,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
     editorTable.set_function("unlinkObjects", [](sol::lua_table objects, curengine engine) {
         CCArrayExt<GameObject*> array = CCArray::createWithCapacity(objects.size());
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
             array.push_back(object.value());
         }
@@ -537,7 +539,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
 
         std::unordered_set<GameObject*> set;
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
 
             CCArrayExt<GameObject*> linkedObjects = static_cast<CCArray*>(editorLayer->m_linkedGroupDict->objectForKey(object.value()->m_linkedGroup));
@@ -571,7 +573,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         int keyframeIndex = 0;
         CCArrayExt<GameObject*> keyframes = CCArray::createWithCapacity(objects.size());
         for (int i = 1; i <= objects.size(); i++) {
-            sol::optional<GameObject*> object = objects[i];
+            auto object = objects.raw_get<sol::optional<GameObject*>>(i);
             if (!object.has_value() || !gameObjectExists(object.value())) continue;
 
             auto keyframe = typeinfo_cast<KeyframeGameObject*>(object.value());

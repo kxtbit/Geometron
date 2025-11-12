@@ -51,6 +51,12 @@ These two properties combine, albeit in an odd way, to represent any rotation or
 ### `GameObject.vectorX`, `GameObject.vectorY`
 Properties representing, as points, the X and Y basis vectors mentioned in the previous section.
 Assigning a new value to either of these properties will also modify the corresponding scale and rotation properties.
+### `GameObject.transform`
+A property containing the transform of the object, which contains its position, rotation, scale, and warp in one value; see [transform.md](transform.md).
+Writing to this property also changes `pos`, `scaleX`, `scaleY`, `rotX`, and `rotY`.
+Note that the transform data type uses a much higher precision than Geometry Dash does,
+so some information may be lost when writing a transform to this property.
+
 ### `GameObject.baseColorID`, `GameObject.detailColorID`
 Properties representing the color channel IDs of the object's "base" and "detail" colors respectively.
 Note that for object types that only have one color, that color will always be treated as a base color, even if it shows up as "Detail" in the editor.
@@ -165,6 +171,9 @@ local obj = editor.createObject(693) --ID 693: single color slope
 --so pass 1 as flipMask to flip the slope horizontally before transforming
 obj:setPosition3P(a, b, c, 1)
 ```
+### `GameObject:transformBy(transform)`
+Transforms this object by the provided transform.
+Equivalent to `object.transform = transform:apply(object.transform)`.
 
 ## Object Subclasses
 Many types of objects in Geometry Dash can be configured in other ways; these objects are represented by subclasses:

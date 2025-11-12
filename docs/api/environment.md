@@ -4,6 +4,7 @@ Geometron provides several new APIs to Lua scripts in the global environment to 
 - `engine.*` - contains miscellaneous functions for interacting with the Geometron engine, as well as filesystem operations; see [engine.md](engine.md)
 - `editor.*` - contains functions to interact with the GD editor; see [editor.md](editor.md)
 - `point` - A basic data type representing a 2D point, creatable with `point.new(x, y)`; see [point.md](point.md)
+- `transform` - A data type representing an affine transform (any combination of position, rotation, scale, and skew); see [transform.md](transform.md)
 - `color` - A basic data type representing a 24-bit RGB color value, creatable with `color.new(r, g, b)`; see [color.md](color.md)
 - `hsv` - A special data type designed to represent the HSV settings for a Geometry Dash object, creatable with `hsv.new(h, s, v, addS, addV)`; see [hsv.md](hsv.md)
 - `GameObject` - A complex data type representing a Geometry Dash object in the editor; see [GameObject.md](GameObject.md)

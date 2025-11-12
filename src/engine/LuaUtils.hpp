@@ -6,32 +6,18 @@
 #include <Geode/Geode.hpp>
 #include <sol/sol.hpp>
 
+#include "../utils/types/FixedString.hpp"
 #include "../utils/types/GPoint.hpp"
 
 using namespace geode::prelude;
 
-template<size_t L>
-struct FixedString {
-    static constexpr size_t len = L;
-
-    char v[L + 1] = {};
-    constexpr FixedString(const char (&s)[L + 1]) {
-        std::copy_n(s, L + 1, v);
-    }
-    template<size_t LA, size_t LB>
-    constexpr FixedString(FixedString<LA> a, FixedString<LB> b) {
-        std::copy_n(a.v, LA, v);
-        std::copy_n(b.v, LB + 1, v + LA);
-    }
-};
-template<size_t L>
-FixedString(const char(&s)[L]) -> FixedString<L - 1>;
-template<size_t LA, size_t LB>
-FixedString(FixedString<LA>, FixedString<LB>) -> FixedString<LA + LB>;
-
 template<FixedString str>
 void pushConstantString(lua_State* L) {
     lua_pushlstring(L, str.v, str.len);
+}
+template<FixedString str>
+void bufferAddConstantString(luaL_Buffer* buf) {
+    luaL_addlstring(buf, str.v, str.len);
 }
 inline std::string_view checkStringView(lua_State* L, int index) {
     size_t len;

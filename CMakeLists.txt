@@ -46,7 +46,8 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES}
         src/utils/types/GTransform.hpp
         src/engine/LuaUtils.hpp
         src/engine/LuaSmartArray.cpp
-        src/engine/LuaModules.hpp)
+        src/engine/LuaModules.hpp
+        src/utils/types/FixedString.hpp)
 
 if (NOT DEFINED ENV{GEODE_SDK})
     message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")

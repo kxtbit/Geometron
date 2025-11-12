@@ -46,6 +46,10 @@ struct GPoint {
         return {-x, -y};
     }
 
+    bool constexpr operator==(const GPoint& r) const {
+        return x == r.x && y == r.y;
+    }
+
     explicit constexpr operator std::string() const {
         return fmt::format("point {{{}, {}}}", x, y);
     }

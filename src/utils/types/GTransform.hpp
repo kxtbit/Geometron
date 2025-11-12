@@ -1,3 +1,5 @@
+// ReSharper disable CppLocalVariableMayBeConst
+// ReSharper disable CppDFAUnreachableFunctionCall
 #pragma once
 
 #ifndef GEOMETRON_GTRANSFORM_HPP
@@ -40,6 +42,7 @@ struct GTransform {
             y, 1, 0,
         };
     }
+    static constexpr GTransform shear(const GPoint& point) {return shear(point.x, point.y);}
     static constexpr GTransform rotation(double rad) {
         double cos = std::cos(rad);
         double sin = std::sin(rad);
@@ -68,7 +71,7 @@ struct GTransform {
         //    .chain(dualRotation(object->getRotationY() * TO_DEG, object->getRotationX() * TO_DEG))
         //    .chain(translation(object->getPositionX(), object->getPositionY()));
 
-        //this should be equivalent to the above
+        //this should be equivalent to the above but a bit more efficient
         double posX = object->getPositionX(), posY = object->getPositionY() - 90.0;
         double scaleX = object->m_scaleX, scaleY = object->m_scaleY;
         double radX = -object->getRotationY() * TO_RAD, radY = -object->getRotationX() * TO_RAD;
@@ -94,7 +97,7 @@ struct GTransform {
     GTransform constexpr inverse() const {
         double detMain = xx*yy - xy*yx;
         double detAuxX = yx*yc - xc*yy;
-        double detAuxY = xy*xc - yx*xx;
+        double detAuxY = xy*xc - yc*xx;
         double mul = 1.0 / detMain;
         return {
             mul * yy, mul * -xy, mul * detAuxX,
@@ -127,12 +130,31 @@ struct GTransform {
     GTransform constexpr chain(const GTransform& o) const {
         return o.apply(*this);
     }
+    //return a copy of this transform with o as the origin instead of the identity transform
+    GTransform constexpr around(const GTransform& o) const {
+        return o.inverse().chain(*this).chain(o);
+    }
+    GTransform constexpr around(const GPoint& point) const {
+        auto o = translation(point);
+        return o.inverse().chain(*this).chain(o);
+    }
 
-    GTransform constexpr operator+(const GPoint& other) {
+    GTransform constexpr operator+(const GPoint& other) const {
         return {
             xx, xy, xc + other.x,
             yx, yy, yc + other.y,
         };
+    }
+    GTransform constexpr operator-(const GPoint& other) const {
+        return {
+            xx, xy, xc - other.x,
+            yx, yy, yc - other.y,
+        };
+    }
+
+    bool constexpr operator==(const GTransform& r) const {
+        return xx == r.xx && xy == r.xy && xc == r.xc
+            && yx == r.yx && yy == r.yy && yc == r.yc;
     }
 
     explicit constexpr operator std::string() const {

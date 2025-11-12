@@ -7,6 +7,7 @@
 
 #include "../LuaEngine.hpp"
 #include "../LuaUtils.hpp"
+#include "../../utils/types/FixedString.hpp"
 #include "../../utils/types/GPoint.hpp"
 
 using namespace geode::prelude;
