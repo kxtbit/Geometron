@@ -8,7 +8,7 @@
 using namespace geode::prelude;
 
 ScriptLoader* ScriptLoader::instance;
-static void ScriptLoader_init() {
+void ScriptLoader_init() {
     auto saveDir = Mod::get()->getSaveDir();
     ScriptLoader::instance = new ScriptLoader(saveDir / "scripts", saveDir / "workspace");
 }

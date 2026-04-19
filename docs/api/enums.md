@@ -39,6 +39,56 @@ It defines 10 mappings:
 - `ZLayer.T2 = 7`
 - `ZLayer.T3 = 9`
 - `ZLayer.T4 = 11`
+### `GameObjectType`
+An enumeration representing various differently-behaving object types. Most are self-explanatory.
+It defines 47 mappings:
+- `Solid = 0`
+- `Hazard = 2`
+- `InverseGravityPortal = 3`
+- `NormalGravityPortal = 4`
+- `ShipPortal = 5`
+- `CubePortal = 6`
+- `Decoration = 7`
+- `YellowJumpPad = 8`
+- `PinkJumpPad = 9`
+- `GravityPad = 10`
+- `YellowJumpRing = 11`
+- `PinkJumpRing = 12`
+- `GravityRing = 13`
+- `InverseMirrorPortal = 14`
+- `NormalMirrorPortal = 15`
+- `BallPortal = 16`
+- `RegularSizePortal = 17`
+- `MiniSizePortal = 18`
+- `UfoPortal = 19`
+- `Modifier = 20`
+- `Breakable = 21`
+- `SecretCoin = 22`
+- `DualPortal = 23`
+- `SoloPortal = 24`
+- `Slope = 25`
+- `WavePortal = 26`
+- `RobotPortal = 27`
+- `TeleportPortal = 28`
+- `GreenRing = 29`
+- `Collectible = 30`
+- `UserCoin = 31`
+- `DropRing = 32`
+- `SpiderPortal = 33`
+- `RedJumpPad = 34`
+- `RedJumpRing = 35`
+- `CustomRing = 36`
+- `DashRing = 37`
+- `GravityDashRing = 38`
+- `CollisionObject = 39`
+- `Special = 40`
+- `SwingPortal = 41`
+- `GravityTogglePortal = 42`
+- `SpiderOrb = 43`
+- `SpiderPad = 44`
+- `EnterEffectObject = 45`
+- `TeleportOrb = 46`
+- `AnimatedHazard = 47`
 ### `GameObjectClassType`
 An enumeration representing the different internal "types" of objects in Geometry Dash.
 It defines 5 mappings:

@@ -6,8 +6,6 @@
 // ReSharper disable CppHidingFunction
 #include <Geode/Geode.hpp>
 
-#include <geode.custom-keybinds/include/OptionalAPI.hpp>
-
 #include "ScriptSelectorPopup.hpp"
 
 #include "../engine/LuaEngine.hpp"
@@ -18,30 +16,14 @@
 #include "../utils/Settings.hpp"
 
 using namespace geode::prelude;
-using namespace keybinds;
 
 volatile int lastTabIndex = 0;
 
-/*$execute {
-    auto categoryConsole = CategoryV2::create("Geometron/Console");
-    (void)[&]() -> Result<> {
-        GEODE_UNWRAP(BindManagerV2::registerBindable(GEODE_UNWRAP(BindableActionV2::create(
-            "lua-console-send"_spr,
-            "Send Lua console input",
-            "Send the contents of the Lua console text box as input to the interactive console",
-            { GEODE_UNWRAP(KeybindV2::create(KEY_Enter, ModifierV2::None)) },
-            // Category; use slashes for specifying subcategories. See the
-            // Category class for default categories
-            GEODE_UNWRAP(categoryConsole)
-        ))));
-        return Ok();
-    }();
-}*/
-
+//i tried using enterPressed on TextInputDelegate but it no worky :(
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
 class $modify(ConsoleKeyboardHook, CCKeyboardDispatcher) {
-    bool dispatchKeyboardMSG(enumKeyCodes key, bool isKeyDown, bool isKeyRepeat) {
-        if (key == KEY_Enter) {
+    bool dispatchKeyboardMSG(enumKeyCodes key, bool isKeyDown, bool isKeyRepeat, double idk) {
+        if (key == KEY_Enter && isKeyDown) {
             auto console = LuaEngine::get()->getCurrentConsole();
             if (console != nullptr && console->consoleTab->isVisible()) {
                 console->sendConsoleInput(nullptr);
@@ -49,13 +31,16 @@ class $modify(ConsoleKeyboardHook, CCKeyboardDispatcher) {
             }
         }
 
-        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, isKeyDown, isKeyRepeat);
+        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, isKeyDown, isKeyRepeat, idk);
     }
 };
 
 inline static float FONT_SIZE_MULT = 0.6f;
 inline static std::string FONT_NAME = "geode.loader/mdFontMono.fnt";//"AdwaitaMono-Regular.fnt"_spr;
-bool ScriptSelectorPopup::setup(EditorUI* editor) {
+bool ScriptSelectorPopup::init(EditorUI* editor) {
+    if (!Popup::init(380.0f, 280.0f))
+        return false;
+
     setUserObject("is-script-selector-popup", CCBool::create(true));
 
     this->editor = editor;
@@ -70,13 +55,16 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
     }
     engine = LuaEngine::get();
     if (!engine) {
-        errorMessage = "LuaEngine failed to enitialize properly.\nCheck the logs for more details.";
+        errorMessage = "LuaEngine failed to initialize properly.\nCheck the logs for more details.";
         return true;
     }
 
     tabMenu = CCMenu::create();
     tabMenu->setPosition({popupSize.width / 2, popupSize.height - 22});
     tabMenu->setContentSize({popupSize.width - 80, 25});
+    tabMenu->setZOrder(1);
+    //this seems to work i guess???
+    tabMenu->setTouchPriority(-503);
     tabMenu->setID("tab-menu"_spr);
 
     scriptTabButton = CCMenuItemSpriteExtra::create(
@@ -193,13 +181,10 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
         consoleTab->addChildAtPosition(consoleWindow, Anchor::Center, consoleOutOffset);
 
         consoleInput = TextInput::create(consoleInSize.width - 40, "", FONT_NAME);
-        //i thought this was a hacky way to make the text in the text field left aligned
-        //but then i realized this is literally what the one on the level search page does
-        consoleInput->getInputNode()->setAnchorPoint({0.5, 0});
-        consoleInput->getInputNode()->ignoreAnchorPointForPosition(false);
-        consoleInput->getInputNode()->m_textField->setAnchorPoint({0, 0.5});
-        consoleInput->getInputNode()->m_textLabel->setAnchorPoint({0, 0.5});
-        consoleInput->getInputNode()->setMaxLabelScale(FONT_SIZE_MULT * Settings::consoleFontSize());
+        consoleInput->setCommonFilter(CommonFilter::Any);
+        consoleInput->setTextAlign(TextInputAlign::Left);
+        consoleInput->setDelegate(this);
+        consoleInput->setCallbackEnabled(false);
         consoleInput->setID("console-input"_spr);
 
         consoleSendButton = CCMenuItemSpriteExtra::create(
@@ -207,36 +192,11 @@ bool ScriptSelectorPopup::setup(EditorUI* editor) {
             this, menu_selector(ScriptSelectorPopup::sendConsoleInput));
         consoleSendButton->setID("console-send-button"_spr);
 
-        /*this->addEventListener<InvokeBindFilterV2>([this](InvokeBindEventV2* event) {
-            if (event->isDown() && consoleTab->isVisible() && consoleInput->getInputNode()->m_selected) {
-                sendConsoleInput(nullptr);
-                return ListenerResult::Stop;
-            }
-
-            return ListenerResult::Propagate;
-        }, "lua-console-send"_spr);*/
-
         consoleTab->addChildAtPosition(consoleSendButton, Anchor::Center, consoleInOffset + CCPoint((consoleInSize.width - 40) / 2.0f + 3, 0));
         consoleTab->addChildAtPosition(consoleInput, Anchor::Center, consoleInOffset - CCPoint(20, 0));
     }
     if (lastTabIndex == 1 && Settings::consoleAutoFocusInput()) {
         Loader::get()->queueInMainThread([consoleInput = Ref(consoleInput)]() {
-            if (auto bindsResult = BindManagerV2::getBindsFor("script-menu"_spr); bindsResult.isOk()) {
-                auto dispatcher = CCDirector::sharedDirector()->getKeyboardDispatcher();
-                for (auto bind : bindsResult.unwrap()) {
-                    if (auto keybind = dynamic_cast<Keybind*>(bind.data())) {
-                        //someone please tell me if there is a better way to do this without requiring
-                        //the custom keybinds mod be present
-                        class Keybind_public : public Bind {
-                        public:
-                            enumKeyCodes m_key;
-                            Modifier m_modifiers;
-                        };
-                        auto key = reinterpret_cast<Keybind_public*>(keybind)->m_key;
-                        dispatcher->dispatchKeyboardMSG(key, false, false);
-                    }
-                }
-            }
             consoleInput->focus();
         });
     }
@@ -324,7 +284,6 @@ void ScriptSelectorPopup::updateScriptStatus(bool force) {
 }
 
 void ScriptSelectorPopup::addConsoleLine(const std::string& line) {
-
     float logHeight = (consoleText->lineCount() + 1) * consoleText->getLineHeight();
     if (logHeight > consoleWindow->innerHeight()) {
         float newHeight = logHeight;
@@ -335,7 +294,7 @@ void ScriptSelectorPopup::addConsoleLine(const std::string& line) {
     consoleText->addLine(line);
 }
 void ScriptSelectorPopup::sendConsoleInput(CCObject*) {
-    auto str = consoleInput->getString();
+    std::string str = consoleInput->getString();
     consoleInput->setString("");
     LuaEngine::get()->sendInputString(str + std::string("\n"));
     consoleInput->focus();
@@ -401,12 +360,11 @@ void ScriptSelectorPopup::onClickRun(CCObject* object) {
             "OK")->show();
         return;
     }
-    auto result = LuaEngine::get()->executeAsync(editor, data.value(), script.name);
+    auto task = LuaEngine::get()->executeAsync(editor, data.value(), script.name);
     updateScriptStatus();
-    result.listen([name = script.name, engine = engine](ScriptResult* resultP) {
-        //log::info("script {} finished with result {}", name, static_cast<int>(resultP->result));
+
+    task->setOnResult([name = script.name, engine = engine](ScriptResult result) {
         engine->updateScriptStatusForConsole();
-        auto result = *resultP;
         FLAlertLayer* popup = nullptr;
         switch (result.result) {
             case OK:
@@ -443,15 +401,16 @@ void ScriptSelectorPopup::onClickRun(CCObject* object) {
         }
         popup->m_noElasticity = true;
         popup->show();
-    }, [engine = engine](const ScriptExecutionStatus** status) {
-        engine->updateScriptStatusForConsole();
     });
+    task->onProgress = [engine = engine](const ScriptExecutionStatus* status) {
+        engine->updateScriptStatusForConsole();
+    };
 }
 
 void ScriptSelectorPopup::onClickCancel(CCObject* object) {
     auto status = engine->getStatus();
     if (status.type != STOPPED && status.asyncData.isAsync)
-        status.asyncData.task.cancel();
+        status.asyncData.task->cancel();
 }
 
 void ScriptSelectorPopup::onConsoleText(const std::string& text) {
@@ -495,10 +454,30 @@ void ScriptSelectorPopup::onClose(CCObject* object) {
     Popup::onClose(object);
 }
 
+//140 is a completely arbitrary distance to move out of the way of the software keyboard
+//but idk how to do it the correct way :((((
+void ScriptSelectorPopup::textInputOpened(CCTextInputNode* node) {
+#ifdef GEODE_IS_MOBILE
+    m_mainLayer->setPositionY(m_mainLayer->getPositionY() + 140);
+#endif
+}
+void ScriptSelectorPopup::textInputClosed(CCTextInputNode* node) {
+#ifdef GEODE_IS_MOBILE
+    m_mainLayer->setPositionY(m_mainLayer->getPositionY() - 140);
+#endif
+}
+
+void ScriptSelectorPopup::textInputShouldOffset(CCTextInputNode* node, float yOffset) {
+    //this doesn't seem to work on Android from my testing
+    //maybe it works on iOS but i don't have that :/
+//#ifdef GEODE_IS_MOBILE
+    //this->setPositionY(yOffset);
+//#endif
+}
 
 ScriptSelectorPopup* ScriptSelectorPopup::create(EditorUI* editor) {
     auto ret = new ScriptSelectorPopup();
-    if (ret->initAnchored(380.0f, 280.0f, editor)) {
+    if (ret->init(editor)) {
         ret->autorelease();
         return ret;
     }

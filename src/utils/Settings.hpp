@@ -1,3 +1,4 @@
+// ReSharper disable CppNonInlineFunctionDefinitionInHeaderFile
 #pragma once
 
 #ifndef GEOMETRON_SETTINGS_HPP
@@ -7,8 +8,8 @@
 #include <Geode/Geode.hpp>
 using namespace geode::prelude;
 
-template<auto& S, class T = std::remove_reference_t<decltype(S)>>
-static constexpr auto SettingChanged = [](T val) {
+template<auto& S>
+static constexpr auto SettingChanged = [](std::remove_reference_t<decltype(S)> val) {
     S = val;
 };
 
@@ -34,7 +35,7 @@ static constexpr std::string unCamelCase(std::string str) {
         Mod* M = Mod::get(); \
         std::string settingName = unCamelCase(#name); \
         _##name = M->getSettingValue<type>(settingName); \
-        listenForSettingChanges(settingName, SettingChanged<_##name>, M); \
+        listenForSettingChanges<type>(settingName, SettingChanged<_##name>, M); \
     }
 
 #else
@@ -45,6 +46,7 @@ static constexpr std::string unCamelCase(std::string str) {
 DEFINE_SETTING(float, luaMaxExecutionTime);
 DEFINE_SETTING(int, luaInterruptResolution);
 DEFINE_SETTING(float, luaUninterruptibleGraceTime);
+DEFINE_SETTING(bool, luaDisablePreemptionSystem)
 DEFINE_SETTING(bool, luaAllowDebugLibrary);
 
 DEFINE_SETTING(float, consoleFontSize);

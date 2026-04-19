@@ -163,6 +163,10 @@ static constexpr auto gameObjectSubclassReadOnlyPointProperty() {
         return sol::make_object(lua, GPoint{point.x, point.y});
     });
 }
+template<auto Prop>
+static constexpr auto propertyGetter(typename member_pointer_base<decltype(Prop)>::type* object) {
+    return object->*Prop;
+}
 
 void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::usertype<GameObject> gameObjectType);
 void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertype<GameObject> gameObjectType);

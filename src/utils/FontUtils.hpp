@@ -7,7 +7,7 @@
 
 using namespace geode::prelude;
 
-using utf16char = unsigned short;
+using utf16char = char16_t;
 using utf16string = std::basic_string<utf16char>;
 
 float getKerning(CCBMFontConfiguration* fontData, utf16char left, utf16char right);

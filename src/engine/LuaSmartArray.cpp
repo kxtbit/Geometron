@@ -2,7 +2,7 @@
 // ReSharper disable CppDeclarationHidesUncapturedLocal
 #include "LuaModules.hpp"
 
-#include <sol/sol.hpp>
+#include "LuaBackend.hpp"
 
 #include "LuaUtils.hpp"
 

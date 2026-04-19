@@ -10,7 +10,8 @@
 
 #include <Geode/Geode.hpp>
 
-#include <sol/sol.hpp>
+#include "LuaBackend.hpp"
+#include "LuaEngine.hpp"
 
 #include "../ui/ScriptSelectorPopup.hpp"
 #include "../utils/ResizingCircularBuffer.hpp"
@@ -44,7 +45,47 @@ enum ScriptYieldType : int {
     MANUAL,
 };
 struct ScriptExecutionStatus;
-using ScriptTask = Task<ScriptResult, const ScriptExecutionStatus*>;
+struct ScriptTask {
+    bool hasResult = false;
+    ScriptResult result;
+    bool isCancelled;
+
+    geode::CopyableFunction<void(ScriptResult)> onResult;
+    geode::CopyableFunction<void(const ScriptExecutionStatus*)> onProgress;
+
+    void cancel() {
+        isCancelled = true;
+    }
+
+    void setOnResult(const geode::CopyableFunction<void(ScriptResult)>& callback) {
+        onResult = callback;
+        if (hasResult) {
+            callback(result);
+        }
+    }
+
+    void postResult(const ScriptResult& newResult) {
+        hasResult = true;
+        result = newResult;
+        if (onResult) {
+            onResult(newResult);
+        }
+    }
+    void postProgress(const ScriptExecutionStatus* progress) const {
+        if (onProgress) {
+            onProgress(progress);
+        }
+    }
+
+    static std::shared_ptr<ScriptTask> create(const ScriptTask& value) {
+        auto ptr = std::make_shared<ScriptTask>();
+        *ptr = value;
+        return std::move(ptr);
+    }
+    static ScriptTask immediate(const ScriptResult& result) {
+        return ScriptTask {true, result, false};
+    }
+};
 struct ScriptExecutionStatus {
     ScriptExecutionType type;
     ScriptYieldType yieldType;
@@ -54,11 +95,7 @@ struct ScriptExecutionStatus {
     } yieldData;
     struct {
         bool isAsync;
-        ScriptTask task;
-    protected:
-        ScriptTask::PostResult postResult;
-        ScriptTask::PostProgress postProgress;
-        ScriptTask::HasBeenCancelled isCancelled;
+        std::shared_ptr<ScriptTask> task;
 
         friend class LuaEngine;
     } asyncData;
@@ -78,6 +115,7 @@ class LuaEngine {
 
     void init();
     void stateSetup();
+    void stateDestroy();
     void editorSetup(EditorUI* editor);
 
     Ref<ScriptSelectorPopup> currentConsole;
@@ -114,12 +152,14 @@ public:
     static LuaEngine* get();
     static LuaEngine* get(lua_State* lua);
 
+    static bool isInitialized();
+
     const ScriptExecutionStatus& getStatus();
     bool fastGetIsExecuting();
 
     void sendInputString(const std::string& input);
     std::vector<std::string>& getLines();
-    ScriptSelectorPopup* getCurrentConsole();
+    ScriptSelectorPopup* getCurrentConsole() const;
     bool isAsynchronous() const;
 
     void registerConsole(ScriptSelectorPopup* console);
@@ -130,7 +170,7 @@ public:
 
     sol::state& state();
     ScriptResult execute(EditorUI* editor, const std::string& code, const std::string& name = "<unnamed script>");
-    ScriptTask executeAsync(EditorUI* editor, const std::string& code, const std::string& name = "<unnamed script>");
+    std::shared_ptr<ScriptTask> executeAsync(EditorUI* editor, const std::string& code, const std::string& name = "<unnamed script>");
 };
 
 using curengine = LuaEngine*;

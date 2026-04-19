@@ -3,7 +3,7 @@
 This mod adds a custom Lua scripting engine for the Geometry Dash level editor, intended as a versatile tool for automating some parts of level building.
 The engine does not currently support running outside the editor.
 
-For more information on the scripting environment and API, refer to the folder `docs`.
+For more information on the scripting environment and API, refer to the (incomplete) documentation.
 
 Functionality of the editor API includes:
 - Placing any type of object in a level

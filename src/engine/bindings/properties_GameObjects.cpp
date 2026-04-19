@@ -18,22 +18,24 @@ void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::user
         BASE_PROPERTY(detailColorKeyIndex);
         BASE_PROPERTY(editorLayer);
         BASE_PROPERTY(editorLayer2);
-        gameObjectType["zLayer"] = sol::property([](GameObject* object) {
-            return object->m_zLayer;
-        }, [](GameObject* object, ZLayer layer) {
+        gameObjectType["zLayer"] = sol::property(propertyGetter<&GameObject::m_zLayer>, [](GameObject* object, ZLayer layer) {
             if (!object->m_zFixedZLayer) {
                 object->m_zLayer = layer;
-                object->m_shouldUpdateColorSprite = true;
+                //object->m_shouldUpdateColorSprite = true;
+                //i guess this value is called that now? idk
+                object->m_updateParents = true;
             }
         });
         BASE_READONLY_RENAME_PROPERTY(fixedZLayer, zFixedZLayer);
-        gameObjectType["zOrder"] = sol::property([](GameObject* object) {
-            return object->m_zOrder;
-        }, [](GameObject* object, int order) {
+        gameObjectType["zOrder"] = sol::property(propertyGetter<&GameObject::m_zOrder>, [](GameObject* object, int order) {
             object->m_zOrder = order;
-            object->m_shouldUpdateColorSprite = true;
+            //object->m_shouldUpdateColorSprite = true;
+            object->m_updateParents = true;
         });
+        BASE_READONLY_PROPERTY(objectType);
         BASE_READONLY_PROPERTY(classType);
+        BASE_READONLY_PROPERTY(isDecoration);
+        BASE_READONLY_PROPERTY(isDecoration2);
     }
     { //extra object properties
         BASE_PROPERTY(isDontEnter);
@@ -44,7 +46,7 @@ void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::user
         BASE_PROPERTY(isDontBoostX);
         BASE_PROPERTY(isDontBoostY);
         BASE_PROPERTY(isHighDetail);
-        gameObjectType["isNoTouch"] = sol::property(&GameObject::m_isNoTouch, [](GameObject* object, bool noTouch, curengine engine) {
+        gameObjectType["isNoTouch"] = sol::property(propertyGetter<&GameObject::m_isNoTouch>, [](GameObject* object, bool noTouch, curengine engine) {
             bool exists = gameObjectExists(object);
 
             auto editorLayer = engine->editor->m_editorLayer;
@@ -64,7 +66,7 @@ void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::user
         BASE_PROPERTY(isNonStickY);
         BASE_PROPERTY(isExtraSticky);
         BASE_PROPERTY(isScaleStick);
-        gameObjectType["isExtendedCollision"] = sol::property(&GameObject::m_hasExtendedCollision, [](GameObject* object, bool noTouch, curengine engine) {
+        gameObjectType["isExtendedCollision"] = sol::property(propertyGetter<&GameObject::m_hasExtendedCollision>, [](GameObject* object, bool noTouch, curengine engine) {
             bool exists = gameObjectExists(object);
 
             auto editorLayer = engine->editor->m_editorLayer;
@@ -171,7 +173,7 @@ void addPropertiesForGameObjects(sol::state_view& lua, EditorUI* self, sol::user
     }
 
     gameObjectType["text"] = sol::property([](GameObject* object, sol::this_state lua) {
-        return subclassCast<TextGameObject>(object, lua)->m_text;
+        return std::string(subclassCast<TextGameObject>(object, lua)->m_text);
     }, [](GameObject* object, std::string str, sol::this_state lua) {
         checkObjectExists(lua, object);
         subclassCast<TextGameObject>(object, lua)->updateTextObject(str, false);

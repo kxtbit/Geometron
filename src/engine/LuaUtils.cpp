@@ -6,7 +6,6 @@
 // ReSharper disable CppHidingFunction
 #include "LuaUtils.hpp"
 
-#include <generator>
 #include <string>
 
 #include <Geode/Geode.hpp>
@@ -139,6 +138,7 @@ GameObject* safeCreateObject(EditorUI* editor, int id, GPoint pos) {
     auto editorLayer = editor->m_editorLayer;
     //last parameter true i think makes it not count in the undo history
     auto object = editorLayer->createObject(id, CCPoint(pos + GPoint {0, 90}), true);
+    if (object == nullptr) return nullptr;
     //make sure editor layer is 0 instead of whatever the editor is currently set to
     object->m_editorLayer = 0;
     switch (id) {
@@ -242,9 +242,10 @@ CCArrayExt<TextGameObject> splitText(EditorUI* editor, TextGameObject* text) {
 
     CCArrayExt<CCFontSprite> sprites = text->getChildren();
     CCArrayExt<TextGameObject> objects = CCArray::createWithCapacity(sprites.size());
-    auto str = text->m_text;
+    std::string str = text->m_text;
     auto ccwstr = cc_utf8_to_utf16(str.c_str());
-    utf16string wstr = ccwstr;
+    static_assert(sizeof(char16_t) == sizeof(uint16_t), "char16_t length is not 2 bytes");
+    utf16string wstr = reinterpret_cast<char16_t*>(ccwstr);
     CC_SAFE_DELETE_ARRAY(ccwstr);
 
     for (int i = 0, spriteIndex = 0; i < wstr.size(); i++) {
@@ -355,3 +356,11 @@ sol::function yieldingFunction(sol::state_view& lua, F func) {
 
 //template int yieldingFunctionContinuation<YieldingFunctionCoroutine (*)(sol::variadic_args, curengine)>(lua_State*, int, lua_KContext);
 template sol::function yieldingFunction(sol::state_view& lua, YieldingFunctionCoroutine (*)(sol::variadic_args, lua_State*));
+
+#include <assert.h>
+extern "C" void _internal_assert(int condition, const char* message) {
+    if (!condition) {
+        log::error("Internal Lua assertion failed: {}", message);
+        __builtin_debugtrap();
+    }
+}

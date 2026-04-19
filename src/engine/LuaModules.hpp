@@ -3,7 +3,7 @@
 #ifndef GEOMETRON_LUAMODULES_HPP
 #define GEOMETRON_LUAMODULES_HPP
 
-#include <sol/sol.hpp>
+#include "LuaBackend.hpp"
 
 class EditorUI;
 

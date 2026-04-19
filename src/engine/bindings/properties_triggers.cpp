@@ -2,6 +2,7 @@
 
 void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertype<GameObject> gameObjectType) {
 #define SUBCLASS_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassProperty<&type::m_##name>()
+#define SUBCLASS_RENAME_PROPERTY(type, newName, oldName) gameObjectType[#newName] = gameObjectSubclassProperty<&type::m_##oldName>()
 #define SUBCLASS_POINT_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassPointProperty<&type::m_##name>()
 #define SUBCLASS_READONLY_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassReadOnlyProperty<&type::m_##name>()
 #define SUBCLASS_READONLY_POINT_PROPERTY(type, name) gameObjectType[#name] = gameObjectSubclassReadOnlyPointProperty<&type::m_##name>()
@@ -19,7 +20,7 @@ void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertyp
                 object->m_endPosition = CCPoint {0, 0};
         });
 
-        gameObjectType["targetColorID"] = sol::property(&GameObject::m_targetColor, [](GameObject* object, int id, sol::this_state lua) {
+        gameObjectType["targetColorID"] = sol::property(propertyGetter<&GameObject::m_targetColor>, [](GameObject* object, int id, sol::this_state lua) {
             object->m_targetColor = id;
             labelHook::f(object, lua);
         }); //this one is on GameObject for some reason, no idea why
@@ -290,7 +291,7 @@ void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertyp
         SUBCLASS_PROPERTY(EnterEffectObject, dontEditAreaParent);
         SUBCLASS_PROPERTY(EnterEffectObject, priority);
         //gameObjectType["unk7d8"] = gameObjectSubclassProperty(lua, &EnterEffectObject::m_unk7d8);
-        SUBCLASS_PROPERTY(EnterEffectObject, enterChannel);
+        SUBCLASS_RENAME_PROPERTY(EnterEffectObject, targetEnterChannel, enterChannel);
         SUBCLASS_PROPERTY(EnterEffectObject, useEffectID);
         //gameObjectType["unk7e4"] = gameObjectSubclassProperty(lua, &EnterEffectObject::m_unk7e4);
         //gameObjectType["unk7ec"] = gameObjectSubclassProperty(lua, &EnterEffectObject::m_unk7ec);
@@ -313,26 +314,26 @@ void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertyp
             }
             return table;
         });
-        gameObjectType.set_function("eventAddID", [](GameObject* rawObject, sol::variadic_args ids, sol::this_state lua) {
+        gameObjectType.set_function("eventAddIDs", [](GameObject* rawObject, sol::variadic_args ids, sol::this_state lua) {
             auto object = subclassCast<EventLinkTrigger>(rawObject, lua);
             for (sol::optional<int> id : ids) {
                 if (!id.has_value()) continue;
-                object->m_eventIDs.erase(id.value());
+                object->m_eventIDs.insert(id.value());
             }
         });
-        gameObjectType.set_function("eventSetID", [](GameObject* rawObject, sol::variadic_args ids, sol::this_state lua) {
+        gameObjectType.set_function("eventSetIDs", [](GameObject* rawObject, sol::variadic_args ids, sol::this_state lua) {
             auto object = subclassCast<EventLinkTrigger>(rawObject, lua);
             object->m_eventIDs.clear();
             for (sol::optional<int> id : ids) {
                 if (!id.has_value()) continue;
-                object->m_eventIDs.erase(id.value());
+                object->m_eventIDs.insert(id.value());
             }
         });
-        gameObjectType.set_function("eventRemoveID", [](GameObject* rawObject, sol::variadic_args ids, sol::this_state lua) {
+        gameObjectType.set_function("eventRemoveIDs", [](GameObject* rawObject, sol::variadic_args ids, sol::this_state lua) {
             auto object = subclassCast<EventLinkTrigger>(rawObject, lua);
             for (sol::optional<int> id : ids) {
                 if (!id.has_value()) continue;
-                object->m_eventIDs.extract(id.value());
+                object->m_eventIDs.erase(id.value());
             }
         });
 
@@ -431,30 +432,104 @@ void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertyp
         SUBCLASS_PROPERTY(TransformTriggerGameObject, relativeRotation);
         SUBCLASS_PROPERTY(TransformTriggerGameObject, relativeScale);
 
-        gameObjectType["advRandTargetCount"] = sol::readonly_property([](GameObject* object, sol::this_state lua) -> sol::object {
-            return sol::make_object(lua, static_cast<int>(subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects.size()));
+        gameObjectType["advRandTargetCount"] = sol::readonly_property([](GameObject* object, sol::this_state lua) {
+            return static_cast<int>(subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects.size());
         });
         gameObjectType.set_function("advRandGetTarget", [](GameObject* object, int index, sol::this_state lua) -> sol::object {
-            auto chance = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects.at(index);
-            return sol::make_object(lua, std::tuple{chance.m_groupID, chance.m_chance});
+            {
+                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index < 1 || index > chances.size()) goto oob;
+                auto chance = chances.at(index - 1);
+                return sol::make_object(lua, std::make_tuple(chance.m_groupID, chance.m_chance));
+            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
         });
-        gameObjectType.set_function("advRandSetTarget", [](GameObject* object, int groupID, int chanceValue, int index, sol::this_state lua) {
-            auto chance = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects.at(index);
-            chance.m_groupID = groupID;
-            chance.m_oldGroupID = chance.m_groupID;
-            chance.m_chance = chanceValue;
+        gameObjectType.set_function("advRandSetTarget", [](GameObject* object, int groupID, int chanceValue, int index, sol::this_state lua) -> sol::object {
+            {
+                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index < 1 || index > chances.size()) goto oob;
+                auto chance = chances.at(index - 1);
+                chance.m_groupID = groupID;
+                chance.m_chance = chanceValue;
+            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
         });
-        gameObjectType.set_function("advRandAddTarget", [](GameObject* object, int groupID, int chanceValue, sol::optional<int> index, sol::this_state lua) {
-            auto chance = ChanceObject(groupID, chanceValue);
-            auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
-            if (index.has_value())
-                chances.insert(chances.begin() + index.value(), chance);
-            else
-                chances.push_back(chance);
+        gameObjectType.set_function("advRandAddTarget", [](GameObject* object, int groupID, int chanceValue, sol::optional<int> index, sol::this_state lua) -> sol::object {
+            {
+                auto chance = ChanceObject(groupID, chanceValue);
+                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index.has_value()) {
+                    auto indexV = index.value();
+                    if (indexV < 1 || indexV > chances.size()) goto oob;
+#if !defined(GEODE_IS_ANDROID)
+                    chances.insert(chances.cbegin() + (indexV - 1), chance);
+#else
+                    //for some reason vector.insert errors on sdk 4.10.0
+                    //Geode/loader/include/Geode/c++stl/gnustl/vector.tcc:140:33: error:
+                    //no member named '_M_const_cast' in 'geode::stl::__normal_iterator<const ChanceObject *, geode::stl::vector<ChanceObject>>'
+                    //so i guess i will do it manually
+                    auto size = chances.size();
+                    chances.resize(size + 1);
+                    for (auto i = size; i > indexV; i--)
+                        chances[i] = chances[i - 1];
+                    chances[indexV] = chance;
+#endif
+                } else
+                    chances.push_back(chance);
+            } oob: luaL_error(lua, "index %d out of bounds", index.value()); return sol::nil;
         });
         gameObjectType.set_function("advRandRemoveTarget", [](GameObject* object, int index, sol::this_state lua) {
-            auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
-            chances.erase(chances.begin() + index);
+            {
+                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index < 1 || index > chances.size()) goto oob;
+                chances.erase(chances.cbegin() + (index - 1));
+            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+        });
+
+        gameObjectType["spawnRemapCount"] = sol::readonly_property([](GameObject* object, sol::this_state lua) {
+            return static_cast<int>(subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects.size());
+        });
+        gameObjectType.set_function("spawnGetRemap", [](GameObject* object, int index, sol::this_state lua) -> sol::object {
+            {
+                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index < 1 || index > remaps.size()) goto oob;
+                auto remap = remaps.at(index - 1);
+                return sol::make_object(lua, std::make_tuple(remap.m_groupID, remap.m_chance)); //m_chance is dest group
+            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+        });
+        gameObjectType.set_function("spawnSetRemap", [](GameObject* object, int srcGroup, int destGroup, int index, sol::this_state lua) -> sol::object {
+            {
+                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index < 1 || index > remaps.size()) goto oob;
+                auto remap = remaps.at(index - 1);
+                remap.m_groupID = srcGroup;
+                remap.m_chance = destGroup;
+            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+        });
+        gameObjectType.set_function("spawnAddRemap", [](GameObject* object, int srcGroup, int destGroup, sol::optional<int> index, sol::this_state lua) -> sol::object {
+            {
+                auto remap = ChanceObject(srcGroup, destGroup);
+                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index.has_value()) {
+                    auto indexV = index.value();
+                    if (indexV < 1 || indexV > remaps.size()) goto oob;
+#if !defined(GEODE_IS_ANDROID)
+                    remaps.insert(remaps.cbegin() + (indexV - 1), remap);
+#else
+                    auto size = remaps.size();
+                    remaps.resize(size + 1);
+                    for (auto i = size; i > indexV; i--)
+                        remaps[i] = remaps[i - 1];
+                    remaps[indexV] = remap;
+#endif
+                } else
+                    remaps.push_back(remap);
+            } oob: luaL_error(lua, "index %d out of bounds", index.value()); return sol::nil;
+        });
+        gameObjectType.set_function("spawnRemoveRemap", [](GameObject* object, int index, sol::this_state lua) {
+            {
+                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index < 1 || index > remaps.size()) goto oob;
+                remaps.erase(remaps.cbegin() + (index - 1));
+            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
         });
     }
 }

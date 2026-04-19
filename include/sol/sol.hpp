@@ -5941,7 +5941,7 @@ namespace sol {
 			if (has_value())
 				return this->m_value;
 #if SOL_IS_OFF(SOL_EXCEPTIONS)
-			std::abort();
+			*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #else
 			throw bad_optional_access();
 #endif // No exceptions allowed
@@ -5952,7 +5952,7 @@ namespace sol {
 			if (has_value())
 				return this->m_value;
 #if SOL_IS_OFF(SOL_EXCEPTIONS)
-			std::abort();
+			*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #else
 			throw bad_optional_access();
 #endif // No exceptions allowed
@@ -5962,7 +5962,7 @@ namespace sol {
 			if (has_value())
 				return std::move(this->m_value);
 #if SOL_IS_OFF(SOL_EXCEPTIONS)
-			std::abort();
+			*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #else
 			throw bad_optional_access();
 #endif // No exceptions allowed
@@ -5974,7 +5974,7 @@ namespace sol {
 			if (has_value())
 				return std::move(this->m_value);
 #if SOL_IS_OFF(SOL_EXCEPTIONS)
-			std::abort();
+			*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #else
 			throw bad_optional_access();
 #endif // No exceptions allowed
@@ -6813,7 +6813,7 @@ namespace sol {
 			if (has_value())
 				return *m_value;
 #if SOL_IS_OFF(SOL_EXCEPTIONS)
-			std::abort();
+			*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #else
 			throw bad_optional_access();
 #endif // No exceptions allowed
@@ -6824,7 +6824,7 @@ namespace sol {
 			if (has_value())
 				return *m_value;
 #if SOL_IS_OFF(SOL_EXCEPTIONS)
-			std::abort();
+			*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #else
 			throw bad_optional_access();
 #endif // No exceptions allowed
@@ -13529,7 +13529,7 @@ namespace sol { namespace stack {
 #if SOL_IS_ON(SOL_DEBUG_BUILD)
 					// In debug mode we would rather abort you for this grave failure rather
 					// than let you deref a null pointer and fuck everything over
-					std::abort();
+					*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #endif
 					return static_cast<actual>(std::move(r));
 				}
@@ -13566,7 +13566,7 @@ namespace sol { namespace stack {
 #if SOL_IS_ON(SOL_DEBUG_BUILD)
 					// In debug mode we would rather abort you for this grave failure rather
 					// than let you deref a null pointer and fuck everything over
-					std::abort();
+					*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 #endif
 					return static_cast<actual>(r);
 				}
@@ -14335,7 +14335,7 @@ namespace sol { namespace stack {
 			}
 			else {
 				// using T = std::variant_alternative_t<0, V>;
-				std::abort();
+				*reinterpret_cast<volatile int*>(0) = 0; __builtin_trap();
 				// return V(std::in_place_index<0>, stack::get<T>(L, index, tracking));
 			}
 		}

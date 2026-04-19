@@ -17,19 +17,38 @@ using namespace geode::prelude;
 
 LuaEngine* LuaEngine::instance;
 
-static inline void luaPanic(sol::optional<std::string> msg) {
-    if (msg) {
-        log::error("Lua panic triggered: {}", msg.value());
+void hook_abort() {
+    log::error("abort called");
+    __builtin_debugtrap();
+}
+$execute {
+    auto result = Mod::get()->hook(
+        reinterpret_cast<void*>(
+            getNonVirtual(&abort)
+        ),
+        &hook_abort,
+        "abort",
+        tulip::hook::TulipConvention::Cdecl
+    );
+    if (!result) log::error("could not hook abort: ", result.err().value());
+}
+
+static inline int luaPanic(lua_State* L) {
+    if (lua_isstring(L, -1)) {
+        log::error("Lua panic triggered: {}", lua_tostring(L, -1));
     } else {
         log::error("Lua panic triggered with no error info");
     }
     //something went horribly wrong, manually trigger a crash so at least Lua doesn't abort() and we can get some error info
-    *reinterpret_cast<volatile int*>(0) = 1;
+    //*reinterpret_cast<volatile int*>(0) = 1;
+    __builtin_debugtrap();
+    return 0;
 }
 void LuaEngine::init() {
     log::info("Initializing Lua engine...");
     if (!tryLock())
         log::warn("The Lua engine is already locked before initialization, things might break!");
+    //if (!lj_test()) __builtin_debugtrap();
 
     //stateSetup();
     consoleLines.push_back("");
@@ -51,7 +70,6 @@ void LuaEngine::init() {
 
     unlock();
 }
-
 template<int (*ReturnHandler)(lua_State*, int)>
 static int coroutineResumeContinuation(lua_State* L, int, lua_KContext ctx) {
     //believe me i would love not to reinterpret_cast here but we are in C land :/
@@ -66,7 +84,7 @@ static int coroutineResumeContinuation(lua_State* L, int, lua_KContext ctx) {
     return doPostResume<ReturnHandler>(L, co, status, nCoRets);
 }
 template<int (*ReturnHandler)(lua_State*, int)>
-static int doPostResume(lua_State* L, lua_State* co, int status, int nCoRets) {
+int doPostResume(lua_State* L, lua_State* co, int status, int nCoRets) {
     //based on luaB_coresume from lcorolib.c
     LuaEngine* engine = LuaEngine::get(L);
     if (status == LUA_YIELD && engine->executionStatus.type == YIELDING) {
@@ -146,10 +164,17 @@ static int customCoroutineWrap(lua_State* L) {
 }
 void LuaEngine::stateSetup() {
     //lua.~state();
-    lua = nullptr;
-    lua = sol::state(sol::c_call<decltype(&luaPanic), &luaPanic>);
+    stateDestroy();
+    lua = sol::state();
+    lua_atpanic(lua, &luaPanic);
+    lua_setwarnf(lua.lua_state(), [](void* ud, const char* msg, int tocont) {
+        if (msg) {
+            std::string str = msg;
+            if (str.size() == 0) return;
+            log::warn("Lua warning emitted: {}", str);
+        }
+    }, nullptr);
     //debugTrap();
-    editor = nullptr;
 
     *static_cast<LuaEngine**>(lua_getextraspace(lua.lua_state())) = this;
 
@@ -173,6 +198,10 @@ void LuaEngine::stateSetup() {
     lua["os"]["rename"] = sol::nil;
     lua["os"]["tmpname"] = sol::nil;
     lua["os"]["setlocale"] = sol::nil;
+
+    lua.set_function("errtest", [](sol::this_state L) {
+        luaL_error(L, "test error");
+    });
 
     if (!Settings::luaAllowDebugLibrary()) {
         auto newDebug = lua.create_table_with("traceback", lua["debug"]["traceback"]);
@@ -395,6 +424,14 @@ void LuaEngine::stateSetup() {
 
     lua["engine"] = engineTable;
 }
+void LuaEngine::stateDestroy() {
+    if (lua.lua_state() != nullptr) {
+        lua_settop(lua.lua_state(), 0);
+        lua = nullptr;
+        editor = nullptr;
+    }
+}
+
 void LuaEngine::editorSetup(EditorUI* editor) {
     //log::info("begin editor setup");
     this->editor = editor;
@@ -614,16 +651,16 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         return engine->editor->m_editorLayer->getNextColorChannel();
     });
     editorTable.set_function("nextFreeGroupID", [](curengine engine) {
-        return engine->editor->m_editorLayer->getNextFreeGroupID(nullptr);
+        return engine->editor->m_editorLayer->getNextFreeGroupID(gd::unordered_set<int>());
     });
     editorTable.set_function("nextFreeItemID", [](curengine engine) {
-        return engine->editor->m_editorLayer->getNextFreeItemID(nullptr);
+        return engine->editor->m_editorLayer->getNextFreeItemID(gd::unordered_set<int>());
     });
     editorTable.set_function("nextFreeGradientID", [](curengine engine) {
-        return engine->editor->m_editorLayer->getNextFreeGradientID(nullptr);
+        return engine->editor->m_editorLayer->getNextFreeGradientID(gd::unordered_set<int>());
     });
     editorTable.set_function("nextFreeAreaEffectID", [](curengine engine) {
-        return engine->editor->m_editorLayer->getNextFreeAreaEffectID(nullptr);
+        return engine->editor->m_editorLayer->getNextFreeAreaEffectID(gd::unordered_set<int>());
     });
 
     editorTable.set_function("getObjectRect", [](GameObject* object, curengine engine, sol::this_state lua) {
@@ -749,7 +786,7 @@ static void luaStackDump(lua_State* L) {
     lua_pop(L, 1);
 }
 
-static void handleYield(LuaEngine* self, int numRets) {
+void handleYield(LuaEngine* self, int numRets) {
     log::debug("yielded with {} values", numRets);
     lua_State* L = self->lua.lua_state();
     //lua_pop(L, numRets);
@@ -763,9 +800,9 @@ static void handleYield(LuaEngine* self, int numRets) {
     }
     self->updateExecutionStatus();
 }
-static void luaPreemptionHook(lua_State* L, lua_Debug* debug) {
+void luaPreemptionHook(lua_State* L, lua_Debug* debug) {
     {
-        log::debug("hit preemption hook");
+        //log::debug("hit preemption hook");
         auto engine = LuaEngine::get(L);
 
         auto currentTime = std::chrono::high_resolution_clock::now();
@@ -773,17 +810,18 @@ static void luaPreemptionHook(lua_State* L, lua_Debug* debug) {
         float msSinceResume = std::chrono::duration_cast<std::chrono::microseconds>(timeSinceResume).count() / 1000.0;
 
         float maxTime = Settings::luaMaxExecutionTime();
+        //log::info("{} ms since resume out of {}", msSinceResume, maxTime);
         if (msSinceResume >= maxTime) {
             if (lua_isyieldable(L)) {
                 engine->executionStatus.type = YIELDING;
                 engine->executionStatus.yieldType = PREEMPTED;
                 engine->updateExecutionStatus();
-                log::debug("preempting script");
+                //log::debug("preempting script");
                 goto yield;
             } else if (float graceTime = Settings::luaUninterruptibleGraceTime(); msSinceResume >= graceTime) {
                 //the script can't yield (maybe it is in a metamethod) and exhausted its grace time of uninterruptible execution
                 //so instead just repeatedly throw errors to try to terminate the script as fast as possible
-                log::debug("terminating script");
+                //log::debug("terminating script");
                 engine->executionStatus.type = TERMINATING_TIMEOUT;
                 engine->updateExecutionStatus();
                 lua_sethook(L, &luaPreemptionHook, LUA_MASKCOUNT, 1); //run the hook every 1 instructions
@@ -805,11 +843,12 @@ static void luaPreemptionHook(lua_State* L, lua_Debug* debug) {
     lua_error(L);
     return;
 }
-static void updatePreemption(LuaEngine* self) {
+void updatePreemption(LuaEngine* self) {
+    if (Settings::luaDisablePreemptionSystem()) return;
     lua_sethook(self->lua.lua_state(), &luaPreemptionHook, LUA_MASKCOUNT, Settings::luaInterruptResolution());
     self->executionStatus.resumeTime = std::chrono::high_resolution_clock::now();
 }
-static void preRunSetup(LuaEngine* self) {
+void preRunSetup(LuaEngine* self) {
     self->consoleLines.clear();
 }
 
@@ -832,8 +871,8 @@ static std::string terminationMessage(ScriptExecutionType type) {
 }
 
 void LuaEngine::updateExecutionStatus() const {
-    if (executionStatus.asyncData.isAsync && executionStatus.asyncData.postProgress)
-        executionStatus.asyncData.postProgress(&executionStatus);
+    if (executionStatus.asyncData.isAsync && executionStatus.asyncData.task)
+        executionStatus.asyncData.task->postProgress(&executionStatus);
 }
 
 void LuaEngine::update(float dt) {
@@ -847,16 +886,14 @@ void LuaEngine::tryResume() {
     if (!tryLock()) return;
 
     lua_State* L = lua.lua_state();
-    if (executionStatus.asyncData.isAsync && executionStatus.asyncData.isCancelled && executionStatus.asyncData.isCancelled()) {
-        executionStatus.asyncData.postResult({SCRIPT_CANCELED});
+    if (executionStatus.asyncData.isAsync && executionStatus.asyncData.task && executionStatus.asyncData.task->isCancelled) {
+        executionStatus.asyncData.task->postResult({SCRIPT_CANCELED});
 
         lua_settop(L, 0);
         executionStatus.type = STOPPED;
-        executionStatus.asyncData.isAsync = false;
-        updateExecutionStatus();
         fastIsExecuting = false;
-
-        updateScriptStatusForConsole();
+        updateExecutionStatus();
+        executionStatus.asyncData.isAsync = false;
 
         stateSetup();
 
@@ -900,12 +937,12 @@ void LuaEngine::tryResume() {
             updatePreemption(this);
             //engine always resumes with no args
             //and since this is the top level the resume is not from any other coroutine so it is nullptr
-            log::debug("resuming now");
+            //log::debug("resuming now");
             //luaStackDump(L);
             int status = lua_resume(L, nullptr, 0, &nRets);
             //luaStackDump(L);
             bool terminated = isTerminating(executionStatus);
-            if (status != LUA_YIELD || terminated) {
+            if (terminated || status != LUA_YIELD) {
                 ScriptResult ret;
                 if (!terminated) switch (status) {
                     case LUA_ERRRUN:
@@ -922,7 +959,9 @@ void LuaEngine::tryResume() {
                     case LUA_OK:
                         ret = {OK};
                         break;
-                    default: break;
+                    default:
+                        ret = {LUA_RUN_ERROR, "bad status"};
+                        break;
                 } else {
                     ret = {LUA_RUN_ERROR, terminationMessage(executionStatus.type)};
                 }
@@ -932,7 +971,7 @@ void LuaEngine::tryResume() {
                 updateExecutionStatus();
                 fastIsExecuting = false;
 
-                executionStatus.asyncData.postResult(ret);
+                executionStatus.asyncData.task->postResult(ret);
 
                 stateSetup();
             } else {
@@ -955,6 +994,11 @@ LuaEngine* LuaEngine::get() {
 LuaEngine* LuaEngine::get(lua_State* lua) {
     return *static_cast<LuaEngine**>(lua_getextraspace(lua));
 }
+
+bool LuaEngine::isInitialized() {
+    return instance != nullptr;
+}
+
 const ScriptExecutionStatus& LuaEngine::getStatus() {
     return executionStatus;
 }
@@ -979,8 +1023,8 @@ void LuaEngine::sendInputString(const std::string& input) {
 std::vector<std::string>& LuaEngine::getLines() {
     return consoleLines;
 }
-ScriptSelectorPopup* LuaEngine::getCurrentConsole() {
-    return currentConsole;
+ScriptSelectorPopup* LuaEngine::getCurrentConsole() const {
+    return currentConsole.data();
 }
 bool LuaEngine::isAsynchronous() const {
     return executionStatus.asyncData.isAsync;
@@ -1021,16 +1065,15 @@ void LuaEngine::forceReset() {
         lua_settop(lua.lua_state(), 0);
         executionStatus.type = STOPPED;
 
-        if (executionStatus.asyncData.isAsync && executionStatus.asyncData.postResult)
-            executionStatus.asyncData.postResult({SCRIPT_CANCELED});
+        if (executionStatus.asyncData.isAsync && executionStatus.asyncData.task)
+            executionStatus.asyncData.task->postResult({SCRIPT_CANCELED});
 
         updateExecutionStatus();
-        executionStatus.asyncData.isAsync = false;
         fastIsExecuting = false;
+        executionStatus.asyncData.isAsync = false;
 
         //stateSetup();
-        lua = nullptr;
-        editor = nullptr;
+        stateDestroy();
     }
 
     if (locked) unlock();
@@ -1096,8 +1139,7 @@ ScriptResult LuaEngine::execute(EditorUI* editor, const std::string& code, const
 
     cleanup:
     //reset environment and clear reference to editor
-    lua = nullptr;
-    editor = nullptr;
+    stateDestroy();
     log::debug("state cleared");
     unlock:
     unlock();
@@ -1124,20 +1166,20 @@ static int errorHandlingWrapper(lua_State* L) {
     };
     return cont(L, lua_pcallk(L, nArgs, LUA_MULTRET, 1, 0, cont), 0);
 }
-ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, const std::string& name) {
+std::shared_ptr<ScriptTask> LuaEngine::executeAsync(EditorUI* editor, const std::string& code, const std::string& name) {
     log::debug("executing script {} async", name);
     if (!tryLock())
-        return ScriptTask::immediate({ENGINE_LOCKED});
+        return ScriptTask::create(ScriptTask::immediate({ENGINE_LOCKED}));
     if (executionStatus.type != STOPPED) {
         unlock();
-        return ScriptTask::immediate({ENGINE_IN_USE});
+        return ScriptTask::create(ScriptTask::immediate({ENGINE_IN_USE}));
     }
 
     stateSetup();
     editorSetup(editor);
     log::debug("editor setup complete");
 
-    ScriptTask ret;
+    std::shared_ptr<ScriptTask> ret;
 
     lua_State* L = lua.lua_state();
     {
@@ -1148,7 +1190,7 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
         if (loadStatus != LUA_OK) {
             size_t len;
             auto err = lua_tolstring(L, -1, &len);
-            ret = ScriptTask::immediate({LUA_COMPILE_ERROR, std::string(err)});
+            ret = ScriptTask::create(ScriptTask::immediate({LUA_COMPILE_ERROR, std::string(err)}));
             goto unlock; //no need to reset state as it has not been used
         }
         log::debug("compiled");
@@ -1174,17 +1216,15 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
             //just make it 0 idk
             handleYield(this, 0);
 
-            auto [task, postResult, postProgress, isCancelled] =
-                ScriptTask::spawn(std::string("async script: " + name));
-            executionStatus.asyncData.postResult = postResult;
-            executionStatus.asyncData.postProgress = postProgress;
-            executionStatus.asyncData.isCancelled = isCancelled;
+            //auto [task, postResult, postProgress, isCancelled] =
+            //    ScriptTask::spawn(std::string("async script: " + name));
+            auto task = std::make_shared<ScriptTask>();
             executionStatus.asyncData.task = task;
             ret = task;
             goto unlock; //script is still running, do not reset the state
         } else if (runStatus == LUA_OK && !terminated) {
             //script returned without yielding
-            ret = ScriptTask::immediate({OK});
+            ret = ScriptTask::create(ScriptTask::immediate({OK}));
             goto immediateFinish;
         } else {
             std::string err;
@@ -1195,7 +1235,7 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
             } else {
                 err = terminationMessage(executionStatus.type);
             }
-            ret = ScriptTask::immediate({LUA_RUN_ERROR, err});
+            ret = ScriptTask::create(ScriptTask::immediate({LUA_RUN_ERROR, err}));
             goto immediateFinish;
         }
     }
@@ -1206,11 +1246,10 @@ ScriptTask LuaEngine::executeAsync(EditorUI* editor, const std::string& code, co
     fastIsExecuting = false;
     updateExecutionStatus();
     //reset environment and clear reference to editor
-    lua = nullptr;
-    editor = nullptr;
+    stateDestroy();
     log::debug("state cleared");
 
     unlock:
     unlock();
-    return ret;
+    return std::move(ret);
 }

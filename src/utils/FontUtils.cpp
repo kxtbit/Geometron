@@ -23,7 +23,9 @@ ccBMFontDef* getCharDef(CCBMFontConfiguration* fontData, utf16char c) {
 std::vector<size_t> wrapString(const std::string& str, float maxWidth, CCBMFontConfiguration* fontData) {
     //log::info("wrapping string \"{}\" to max width {}", escapeString(str), maxWidth);
     auto ccwstr = cc_utf8_to_utf16(str.c_str());
-    utf16string wstr = ccwstr;
+    if (ccwstr == nullptr) return {};
+    static_assert(sizeof(char16_t) == sizeof(uint16_t), "char16_t length is not 2 bytes");
+    utf16string wstr = reinterpret_cast<char16_t*>(ccwstr);
     CC_SAFE_DELETE_ARRAY(ccwstr);
 
     std::vector<size_t> wraps;

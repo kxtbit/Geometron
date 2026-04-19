@@ -6,7 +6,6 @@
 // ReSharper disable CppMemberFunctionMayBeConst
 // ReSharper disable CppFunctionalStyleCast
 #include <Geode/Geode.hpp>
-#include <geode.custom-keybinds/include/OptionalAPI.hpp>
 
 #include "engine/LuaEngine.hpp"
 
@@ -29,37 +28,39 @@ class $modify(GeometronEditorUI, EditorUI) {
     bool init(LevelEditorLayer* editorLayer) {
         if (!EditorUI::init(editorLayer)) return false;
 
-        using namespace keybinds;
-        this->addEventListener<InvokeBindFilterV2>([this](InvokeBindEventV2* event) {
-            if (!event->isDown()) {
-                //there is a setting for Geometron to automatically focus the console input box on opening script popup
-                //but focusing the text box immediately for some reason confuses the keybind system
-                //for example if the script window is bound to Ctrl+B, focusing the text box would make the keybind
-                //system think B is always pressed, so any time you pressed Ctrl the script window would open again
-                //instead, focus the text box when the keybind is released instead of pressed
-                //TODO: this still doesn't work if Ctrl is released first
-                //if (auto popup = CCScene::get()->getChildByType<ScriptSelectorPopup>(0))
-                //    popup->onKeybindRelease();
+        this->addEventListener(
+            KeybindSettingPressedEventV3(Mod::get(), "keybind-script-menu"),
+            [this](Keybind const& keybind, bool down, bool repeat, double timestamp) {
+                if (!down) {
+                    //there is a setting for Geometron to automatically focus the console input box on opening script popup
+                    //but focusing the text box immediately for some reason confuses the keybind system
+                    //for example if the script window is bound to Ctrl+B, focusing the text box would make the keybind
+                    //system think B is always pressed, so any time you pressed Ctrl the script window would open again
+                    //instead, focus the text box when the keybind is released instead of pressed
+                    //TODO: this still doesn't work if Ctrl is released first
+                    //if (auto popup = CCScene::get()->getChildByType<ScriptSelectorPopup>(0))
+                    //    popup->onKeybindRelease();
 
+                    return ListenerResult::Propagate;
+                }
+
+                auto scene = CCScene::get();
+                CCArrayExt<CCNode*> children = scene->getChildren();
+                for (auto child : children) {
+                    //do not open the script selector again if it is already open
+                    if (child->getUserObject("is-script-selector-popup")) return ListenerResult::Propagate;
+                }
+
+                auto popup = ScriptSelectorPopup::create(this);
+                if (!popup) {
+                    log::error("Could not initialize script selector");
+                } else {
+                    popup->m_noElasticity = true;
+                    popup->show();
+                }
                 return ListenerResult::Propagate;
             }
-
-            auto scene = CCScene::get();
-            CCArrayExt<CCNode*> children = scene->getChildren();
-            for (auto child : children) {
-                //do not open the script selector again if it is already open
-                if (child->getUserObject("is-script-selector-popup")) return ListenerResult::Propagate;
-            }
-
-            auto popup = ScriptSelectorPopup::create(this);
-            if (!popup) {
-                log::error("Could not initialize script selector");
-            } else {
-                popup->m_noElasticity = true;
-                popup->show();
-            }
-            return ListenerResult::Propagate;
-        }, "script-menu"_spr);
+        );
 
         return true;
     }
@@ -97,7 +98,7 @@ class $modify(GeometronEditorUI, EditorUI) {
     }
 };
 
-#include <Geode/modify/GameManager.hpp>
+/*#include <Geode/modify/GameManager.hpp>
 class $modify(GameManager) {
     $override
     void returnToLastScene(GJGameLevel* level) {
@@ -110,5 +111,19 @@ class $modify(GameManager) {
             }
         }
         GameManager::returnToLastScene(level);
+    }
+};*/
+#include <Geode/modify/AppDelegate.hpp>
+class $modify(AppDelegate) {
+    $override
+    void willSwitchToScene(CCScene* scene) override {
+        if (LuaEngine::isInitialized()) if (auto engine = LuaEngine::get(); engine->editor != nullptr) {
+            auto editorLayer = scene->getChildByType<LevelEditorLayer>(0);
+            if (editorLayer == nullptr || editorLayer->m_editorUI != engine->editor) {
+                //log::info("must reset engine");
+                engine->forceReset();
+            }
+        }
+        AppDelegate::willSwitchToScene(scene);
     }
 };

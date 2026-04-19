@@ -1,10 +1,10 @@
 {
-	"geode": "4.7.0",
+	"geode": "5.6.1",
 	"gd": {
-		"win": "2.2074",
-		"android": "2.2074",
-		"mac": "2.2074",
-		"ios": "2.2074"
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
 	},
 	"id": "kxtbit.geometron",
 	"name": "Geometron",
@@ -12,18 +12,19 @@
 	"developer": "kxtbit",
 	"description": "Lua scripting engine for Geometry Dash",
 	"dependencies": {
-		"geode.node-ids": ">=v1.20.0",
-		"geode.custom-keybinds": {
-			"version": ">=1.11.0",
-			"importance": "recommended"
-		}
+		"geode.node-ids": ">=v1.20.0"
 	},
 	"settings": {
+		"title-lua": {
+			"type": "title",
+			"name": "Lua Engine",
+			"description": "Settings related to the Lua script engine"
+		},
 		"lua-max-execution-time": {
 			"type": "float",
 			"name": "Lua: Max Execution Time",
 			"description": "Controls the maximum amount of time Lua scripts can execute for in one frame before they are paused (so the game can render), specified in milliseconds",
-			"default": 2,
+			"default": 5,
 			"min": 0,
 			"max": 100,
 			"controls": {
@@ -40,9 +41,9 @@
 			"type": "int",
 			"name": "Lua: Interrupt Resolution",
 			"description": "Sets the intervals of Lua VM instructions after which the max execution time will be checked",
-			"default": 10000,
+			"default": 10000000,
 			"min": 1,
-			"max": 100000,
+			"max": 1000000000,
 			"controls": {
 				"arrows": true,
 				"arrow-step": 1,
@@ -70,11 +71,22 @@
 				"input": true
 			}
 		},
+		"lua-disable-preemption-system": {
+			"type": "bool",
+			"name": "Lua: Disable Preemption System",
+			"description": "Completely disables preempting (pausing) of Lua scripts when they execute for too long; this could potentially speed up execution, but an infinite loop will also freeze the game",
+			"default": false
+		},
 		"lua-allow-debug-library": {
 			"type": "bool",
 			"name": "Lua: Allow Debug Library",
 			"description": "Controls or not to allow access to the debug.* library for Lua scripts, mostly useful for developing Geometron itself; do not enable unless you completely trust the scripts you are running, as this makes it incredibly easy to escape the sandbox!",
 			"default": false
+		},
+		"title-console": {
+			"type": "title",
+			"name": "Console",
+			"description": "Settings relating to the in-game script console"
 		},
 		"console-font-size": {
 			"type": "float",
@@ -111,6 +123,17 @@
 			"name": "Console: Auto-Focus Input",
 			"description": "If enabled, whenever the script window is opened while the console tab is selected, the console input text box will automatically be focused.",
 			"default": false
+		},
+		"title-keybinds": {
+			"type": "title",
+			"name": "Keybinds",
+			"description": "Keybinds for Geometron"
+		},
+		"keybind-script-menu": {
+			"type": "keybind",
+			"name": "Open Script Menu",
+			"default": "Ctrl+B",
+			"category": "editor"
 		}
 	},
 	"resources": {

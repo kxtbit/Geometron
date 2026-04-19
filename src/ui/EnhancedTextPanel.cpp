@@ -12,9 +12,6 @@
 
 using namespace std::string_literals;
 
-using utf16char = unsigned short;
-using utf16string = std::basic_string<utf16char>;
-
 bool EnhancedTextPanel::init(ScrollingWindow* newWindow, float newLineHeight, std::string newFontName, float newFontScale) {
     if (!CCNode::init()) return false;
 

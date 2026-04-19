@@ -61,6 +61,7 @@ YieldingFunctionCoroutine ConsoleInFile::read(sol::variadic_args args, lua_State
                     engine->executionStatus.type = YIELDING;
                     engine->executionStatus.yieldType = WAITING_FOR_CONSOLE_CHARACTERS;
                     engine->luaInBufferPendingCharacters = len - readable;
+
                     co_yield {L, {}};
                 }
             } else if (sol::optional<std::string> strArg = arg; strArg.has_value()) {
@@ -79,6 +80,7 @@ YieldingFunctionCoroutine ConsoleInFile::read(sol::variadic_args args, lua_State
                         engine->executionStatus.type = YIELDING;
                         engine->executionStatus.yieldType = WAITING_FOR_CONSOLE_NEWLINE;
                         engine->luaInBufferNewlineWritten = false;
+
                         co_yield {L, {}};
                         continue;
 

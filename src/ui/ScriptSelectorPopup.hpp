@@ -12,7 +12,7 @@ class EnhancedTextPanel;
 class ScrollingWindow;
 using namespace geode::prelude;
 
-class ScriptSelectorPopup : public Popup<EditorUI*> {
+class ScriptSelectorPopup : public Popup, TextInputDelegate {
     Ref<EditorUI> editor;
 
     LuaEngine* engine;
@@ -41,7 +41,7 @@ class ScriptSelectorPopup : public Popup<EditorUI*> {
 
     std::optional<std::string> errorMessage;
 
-    bool setup(EditorUI* editor) override;
+    bool init(EditorUI* editor);
 
     ~ScriptSelectorPopup() override;
 
@@ -58,6 +58,7 @@ class ScriptSelectorPopup : public Popup<EditorUI*> {
     void onClickCancel(CCObject* object);
 
     friend class ConsoleKeyboardHook;
+
 public:
     static ScriptSelectorPopup* create(EditorUI* editor);
 
@@ -69,6 +70,10 @@ public:
 
     void show() override;
     void onClose(CCObject*) override;
+
+    void textInputOpened(CCTextInputNode* node) override;
+    void textInputClosed(CCTextInputNode* node) override;
+    void textInputShouldOffset(CCTextInputNode* node, float yOffset) override;
 };
 
 #endif //GEOMETRON_SCRIPTSELECTORPOPUP_HPP

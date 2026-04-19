@@ -46,6 +46,54 @@ void luaAddEnums(sol::state_view& lua) {
         "T2", 7, 7, "T2",
         "T3", 9, 9, "T3",
         "T4", 11, 11, "T4");
+    lua["GameObjectType"] = lua.create_table_with(
+        "Solid", 0, 0, "Solid",
+        "Hazard", 2, 2, "Hazard",
+        "InverseGravityPortal", 3, 3, "InverseGravityPortal",
+        "NormalGravityPortal", 4, 4, "NormalGravityPortal",
+        "ShipPortal", 5, 5, "ShipPortal",
+        "CubePortal", 6, 6, "CubePortal",
+        "Decoration", 7, 7, "Decoration",
+        "YellowJumpPad", 8, 8, "YellowJumpPad",
+        "PinkJumpPad", 9, 9, "PinkJumpPad",
+        "GravityPad", 10, 10, "GravityPad",
+        "YellowJumpRing", 11, 11, "YellowJumpRing",
+        "PinkJumpRing", 12, 12, "PinkJumpRing",
+        "GravityRing", 13, 13, "GravityRing",
+        "InverseMirrorPortal", 14, 14, "InverseMirrorPortal",
+        "NormalMirrorPortal", 15, 15, "NormalMirrorPortal",
+        "BallPortal", 16, 16, "BallPortal",
+        "RegularSizePortal", 17, 17, "RegularSizePortal",
+        "MiniSizePortal", 18, 18, "MiniSizePortal",
+        "UfoPortal", 19, 19, "UfoPortal",
+        "Modifier", 20, 20, "Modifier",
+        "Breakable", 21, 21, "Breakable",
+        "SecretCoin", 22, 22, "SecretCoin",
+        "DualPortal", 23, 23, "DualPortal",
+        "SoloPortal", 24, 24, "SoloPortal",
+        "Slope", 25, 25, "Slope",
+        "WavePortal", 26, 26, "WavePortal",
+        "RobotPortal", 27, 27, "RobotPortal",
+        "TeleportPortal", 28, 28, "TeleportPortal",
+        "GreenRing", 29, 29, "GreenRing",
+        "Collectible", 30, 30, "Collectible",
+        "UserCoin", 31, 31, "UserCoin",
+        "DropRing", 32, 32, "DropRing",
+        "SpiderPortal", 33, 33, "SpiderPortal",
+        "RedJumpPad", 34, 34, "RedJumpPad",
+        "RedJumpRing", 35, 35, "RedJumpRing",
+        "CustomRing", 36, 36, "CustomRing",
+        "DashRing", 37, 37, "DashRing",
+        "GravityDashRing", 38, 38, "GravityDashRing",
+        "CollisionObject", 39, 39, "CollisionObject",
+        "Special", 40, 40, "Special",
+        "SwingPortal", 41, 41, "SwingPortal",
+        "GravityTogglePortal", 42, 42, "GravityTogglePortal",
+        "SpiderOrb", 43, 43, "SpiderOrb",
+        "SpiderPad", 44, 44, "SpiderPad",
+        "EnterEffectObject", 45, 45, "EnterEffectObject",
+        "TeleportOrb", 46, 46, "TeleportOrb",
+        "AnimatedHazard", 47, 47, "AnimatedHazard");
     lua["GameObjectClassType"] = lua.create_table_with(
         "Game", 0, 0, "Game",
         "Effect", 1, 1, "Effect",
@@ -69,6 +117,8 @@ static GPoint getObjectPosition(GameObject* object) {
 }
 //updateObjectPosition with EditorUI is still required after this for the changes to work properly
 static void setObjectPosition(GameObject* object, GPoint pos) {
+    if (!std::isfinite(pos.x)) pos.x = 0;
+    if (!std::isfinite(pos.y)) pos.y = 0;
     object->setPosition({static_cast<float>(pos.x), static_cast<float>(pos.y + 90.0f)});
 }
 static void transformObject(GameObject* object, const GTransform& transform, EditorUI* editor) {
@@ -180,6 +230,9 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
         setObjectPosition(object, pos);
         updateObjectPosition(engine->editor, object);
     });
+    gameObjectType["startPos"] = sol::readonly_property([](GameObject* object) {
+        return GPoint {object->m_startPosition.x, object->m_startPosition.y - 90.0f};
+    });
     gameObjectType["x"] = sol::property([](GameObject* object) {
         return object->getPositionX();
     }, [](GameObject* object, float x, curengine engine) {
@@ -254,7 +307,8 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
         if (id < 0) id = 0;
         if (auto color = object->m_baseColor) {
             color->m_colorID = id;
-            object->m_shouldUpdateColorSprite = true;
+            //i guess this value is called that now? idk
+            object->m_updateParents = true;
         }
     });
     gameObjectType["detailColorID"] = sol::property([](GameObject* object, sol::this_state lua) -> sol::object {
@@ -267,7 +321,7 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
         if (id < 0) id = 0;
         if (auto color = object->m_detailColor) {
             color->m_colorID = id;
-            object->m_shouldUpdateColorSprite = true;
+            object->m_updateParents = true;
         }
     });
     gameObjectType["baseColorHSV"] = sol::property([](GameObject* object, sol::this_state lua) {
@@ -276,7 +330,7 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
     }, [](GameObject* object, ccHSVValue hsv) {
         if (auto color = object->m_baseColor) {
             color->m_hsv = hsv;
-            object->m_shouldUpdateColorSprite = true;
+            object->m_updateParents = true;
         }
     });
     gameObjectType["detailColorHSV"] = sol::property([](GameObject* object, sol::this_state lua) {
@@ -285,7 +339,7 @@ void luaAddUsertypes(sol::state_view& lua, EditorUI* self) {
     }, [](GameObject* object, ccHSVValue hsv) {
         if (auto color = object->m_detailColor) {
             color->m_hsv = hsv;
-            object->m_shouldUpdateColorSprite = true;
+            object->m_updateParents = true;
         }
     });
 

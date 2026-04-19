@@ -4,7 +4,7 @@
 #define GEOMETRON_LUAUTILS_HPP
 
 #include <Geode/Geode.hpp>
-#include <sol/sol.hpp>
+#include "LuaBackend.hpp"
 
 #include "../utils/types/FixedString.hpp"
 #include "../utils/types/GPoint.hpp"
