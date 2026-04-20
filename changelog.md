@@ -1,2 +1,2 @@
-# 0.1.0
-- Initial pre-release
+# 1.0.0
+- Initial release

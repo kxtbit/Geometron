@@ -1,9 +1,15 @@
 # Geometron
 
 This mod adds a custom Lua scripting engine for the Geometry Dash level editor, intended as a versatile tool for automating some parts of level building.
-The engine does not currently support running outside the editor.
+The engine does not currently support running outside the editor. If you want to run scripts outside the editor,
+[SerpentLua](https://geode-sdk.org/mods/yellowcat98.serpentlua) may be closer to what you want.
 
-For more information on the scripting environment and API, refer to the (incomplete) documentation.
+This mod is still experimental, and not all features are documented yet!
+I chose to release this because I felt such a mod could be helpful for creators and I didn't want the effort I already
+put into this mod to go to waste if I ended up moving on to something else in the future.
+
+For more information on the scripting environment and API, refer to the documentation on GitHub.
+There are also some sample scripts available for use with this mod.
 
 Functionality of the editor API includes:
 - Placing any type of object in a level
