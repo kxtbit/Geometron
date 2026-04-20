@@ -1,6 +1,5 @@
 ---@diagnostic disable: undefined-global
 ---@diagnostic disable: trailing-space
-debug.sethook()
 
 local linedrawCode = engine.readFile("linedraw.lua")
 if not linedrawCode then
