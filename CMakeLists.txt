@@ -6,6 +6,8 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS" OR IOS)
 else()
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
 endif()
+# std::atomic_flag::notify_all() apparently requires macOS 11.0+
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 project(Geometron VERSION 0.1.0)
