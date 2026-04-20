@@ -190,6 +190,65 @@ void LuaEngine::stateSetup() {
 
     lua["loadfile"] = sol::nil;
     lua["dofile"] = sol::nil;
+    if (!Settings::luaAllowBytecodeLoading()) {
+        lua["load"] = sol::as_function([](lua_State* L) {
+            constexpr int RESERVEDSLOT = 5;
+            //following from lbaselib.c (y u no header file)
+            struct dummy {
+                static int load_aux (lua_State *L, int status, int envidx) {
+                    if (__builtin_expect(status == LUA_OK, 1)) {
+                        if (envidx != 0) {  /* 'env' parameter? */
+                            lua_pushvalue(L, envidx);  /* environment for loaded function */
+                            if (!lua_setupvalue(L, -2, 1))  /* set it as 1st upvalue */
+                            lua_pop(L, 1);  /* remove 'env' if not used by previous call */
+                        }
+                        return 1;
+                    }
+                    else {  /* error (message is on top of the stack) */
+                        luaL_pushfail(L);
+                        lua_insert(L, -2);  /* put before error message */
+                        return 2;  /* return fail plus error message */
+                    }
+                }
+                /*
+                ** Reader for generic 'load' function: 'lua_load' uses the
+                ** stack for internal stuff, so the reader cannot change the
+                ** stack top. Instead, it keeps its resulting string in a
+                ** reserved slot inside the stack.
+                */
+                static const char *generic_reader (lua_State *L, void *ud, size_t *size) {
+                    (void)(ud);  /* not used */
+                    luaL_checkstack(L, 2, "too many nested functions");
+                    lua_pushvalue(L, 1);  /* get function */
+                    lua_call(L, 0, 1);  /* call it */
+                    if (lua_isnil(L, -1)) {
+                      lua_pop(L, 1);  /* pop result */
+                      *size = 0;
+                      return nullptr;
+                    }
+                    else if (__builtin_expect(!lua_isstring(L, -1), 0))
+                        luaL_error(L, "reader function must return a string");
+                    lua_replace(L, RESERVEDSLOT);  /* save string in reserved slot */
+                    return lua_tolstring(L, RESERVEDSLOT, size);
+                }
+            };
+
+            size_t inLen;
+            const char* inStr = lua_tolstring(L, 1, &inLen);
+            int env = (!lua_isnone(L, 4) ? 4 : 0);
+            int status;
+            if (inStr != nullptr) {
+                const char* chunkName = luaL_optstring(L, 2, inStr);
+                status = luaL_loadbufferx(L, inStr, inLen, chunkName, "t");
+            } else {
+                const char* chunkName = luaL_optstring(L, 2, "=(load)");
+                luaL_checktype(L, 1, LUA_TFUNCTION);
+                lua_settop(L, RESERVEDSLOT);
+                status = lua_load(L, dummy::generic_reader, nullptr, chunkName, "t");
+            }
+            return dummy::load_aux(L, status, env);
+        });
+    }
 
     lua["os"]["execute"] = sol::nil;
     lua["os"]["exit"] = sol::nil;
@@ -1166,7 +1225,7 @@ static int errorHandlingWrapper(lua_State* L) {
     };
     return cont(L, lua_pcallk(L, nArgs, LUA_MULTRET, 1, 0, cont), 0);
 }
-std::shared_ptr<ScriptTask> LuaEngine::executeAsync(EditorUI* editor, const std::string& code, const std::string& name) {
+std::shared_ptr<ScriptTask> LuaEngine::executeAsync(EditorUI* newEditor, const std::string& code, const std::string& name, int flag) {
     log::debug("executing script {} async", name);
     if (!tryLock())
         return ScriptTask::create(ScriptTask::immediate({ENGINE_LOCKED}));
@@ -1176,7 +1235,7 @@ std::shared_ptr<ScriptTask> LuaEngine::executeAsync(EditorUI* editor, const std:
     }
 
     stateSetup();
-    editorSetup(editor);
+    editorSetup(newEditor);
     log::debug("editor setup complete");
 
     std::shared_ptr<ScriptTask> ret;
@@ -1197,6 +1256,7 @@ std::shared_ptr<ScriptTask> LuaEngine::executeAsync(EditorUI* editor, const std:
         lua_pushcclosure(L, &errorHandlingWrapper, 1);
 
         executionStatus.scriptName = name;
+        executionStatus.flag = flag;
         executionStatus.asyncData.isAsync = true;
         executionStatus.type = RUNNING;
         fastIsExecuting = true;

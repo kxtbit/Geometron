@@ -48,6 +48,32 @@ local function multiline(firstInput)
     end
 end
 
+local specialNames = {
+    O = editor.getSelectedObject;
+    OA = function() return smart(editor.getSelectedObjects()) end;
+}
+setmetatable(_ENV, {
+    __index = function(_, name)
+        local specialFunc = specialNames[name]
+        if specialFunc then
+            return specialFunc()
+        end
+        return nil
+    end
+})
+CO = editor.createObject
+function CCO(id, ...)
+    local obj = editor.createObject(id, ...)
+    if obj then
+        obj.pos = editor.getViewGridCenter()
+        if id == 747 then
+            obj.orangePortal.y = obj.y + 100
+        end
+    end
+    return obj
+end
+P = point.new
+
 while running do
     io.write("> ")
 

@@ -90,6 +90,7 @@ struct ScriptExecutionStatus {
     ScriptExecutionType type;
     ScriptYieldType yieldType;
     std::string scriptName;
+    int flag;
     union {
         float remainingSleepDuration;
     } yieldData;
@@ -170,7 +171,7 @@ public:
 
     sol::state& state();
     ScriptResult execute(EditorUI* editor, const std::string& code, const std::string& name = "<unnamed script>");
-    std::shared_ptr<ScriptTask> executeAsync(EditorUI* editor, const std::string& code, const std::string& name = "<unnamed script>");
+    std::shared_ptr<ScriptTask> executeAsync(EditorUI* newEditor, const std::string& code, const std::string& name = "<unnamed script>", int flag = 0);
 };
 
 using curengine = LuaEngine*;

@@ -43,11 +43,14 @@ static constexpr std::string unCamelCase(std::string str) {
     namespace Settings { type name(); }
 #endif
 
+DEFINE_SETTING(bool, interfaceTransparentScriptMenu);
+
 DEFINE_SETTING(float, luaMaxExecutionTime);
 DEFINE_SETTING(int, luaInterruptResolution);
 DEFINE_SETTING(float, luaUninterruptibleGraceTime);
 DEFINE_SETTING(bool, luaDisablePreemptionSystem)
 DEFINE_SETTING(bool, luaAllowDebugLibrary);
+DEFINE_SETTING(bool, luaAllowBytecodeLoading);
 
 DEFINE_SETTING(float, consoleFontSize);
 DEFINE_SETTING(float, consoleLineHeightMultiplier);

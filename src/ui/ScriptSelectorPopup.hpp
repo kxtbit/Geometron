@@ -55,6 +55,8 @@ class ScriptSelectorPopup : public Popup, TextInputDelegate {
     void onClickTab(CCObject* object);
     void onClickRun(CCObject* object);
 
+    void onRunInteractive(CCObject* object);
+
     void onClickCancel(CCObject* object);
 
     friend class ConsoleKeyboardHook;

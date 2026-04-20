@@ -2,7 +2,11 @@
 ---@diagnostic disable: trailing-space
 debug.sethook()
 
-local linedraw = assert(load(engine.readFile("linedraw.lua"), "=linedraw.lua"))()
+local linedrawCode = engine.readFile("linedraw.lua")
+if not linedrawCode then
+    error("Could not read linedraw.lua! Is it present in the workspace directory?")
+end
+local linedraw = assert(load(linedrawCode, "=linedraw.lua"))()
 
 local thickness = 30/8
 local defaultSegmentCount = 20

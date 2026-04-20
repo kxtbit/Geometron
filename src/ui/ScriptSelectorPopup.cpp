@@ -46,6 +46,16 @@ bool ScriptSelectorPopup::init(EditorUI* editor) {
     this->editor = editor;
 
     auto popupSize = m_mainLayer->getContentSize();
+    if (Settings::interfaceTransparentScriptMenu()) {
+        NineSlice* newBG = NineSlice::create("square02_001.png");
+        newBG->setOpacity(125);
+        newBG->setContentSize(m_bgSprite->getContentSize());
+        newBG->setScaleMultiplier(m_bgSprite->getScaleMultiplier());
+        newBG->setPosition(m_bgSprite->getPosition());
+        m_mainLayer->addChild(newBG);
+        m_bgSprite->removeFromParentAndCleanup(true);
+        m_bgSprite = newBG;
+    }
 
     auto scriptLoader = ScriptLoader::get();
     auto scripts = scriptLoader->getScripts();
@@ -107,6 +117,19 @@ bool ScriptSelectorPopup::init(EditorUI* editor) {
         auto rowSize = CCSize(listSize.width, 50);
 
         CCArrayExt<CCMenu*> rows;
+        {
+            auto row = CCMenu::create();
+            row->setContentSize(rowSize);
+            row->setID("interactive-mode-row"_spr);
+
+            auto buttonSprite = ButtonSprite::create("Interactive Mode", 130, 0, 0.55, true, "goldFont.fnt", "GJ_button_01.png", 24.0);
+            auto button = CCMenuItemSpriteExtra::create(buttonSprite, this, menu_selector(ScriptSelectorPopup::onRunInteractive));
+            button->setPosition({rowSize.width / 2, rowSize.height / 2});
+            button->setID("interactive-move-button"_spr);
+
+            row->addChild(button);
+            rows.push_back(row);
+        }
         for (int i = 0; i < scripts.size(); i++) {
             auto [name, path] = scripts[i];
 
@@ -144,6 +167,12 @@ bool ScriptSelectorPopup::init(EditorUI* editor) {
         listBorders->setZOrder(1); //show above list
         listBorders->setID("script-list-border"_spr);
 
+        if (Settings::interfaceTransparentScriptMenu()) {
+            list->setPrimaryCellColor({0, 0, 0});
+            list->setSecondaryCellColor({25, 25, 25});
+            list->setCellOpacity(90);
+            listBorders->setVisible(false);
+        }
         scriptTab->addChild(list);
         scriptTab->addChild(listBorders);
     }
@@ -271,7 +300,12 @@ void ScriptSelectorPopup::updateScriptStatus(bool force) {
                 case WAITING_FOR_CONSOLE_NEWLINE:
                     statusName = "Waiting for input..."; break;
             }
-            auto labelString = fmt::format("Executing \"{}\" - {}", status.scriptName, statusName);
+            std::string labelString;
+            if (status.flag == 1) {
+                labelString = statusName;
+            } else {
+                labelString = fmt::format("Executing \"{}\" - {}", status.scriptName, statusName);
+            }
             statusLabel->setString(labelString.c_str());
             statusLabel->setVisible(true);
         }
@@ -402,7 +436,7 @@ void ScriptSelectorPopup::onClickRun(CCObject* object) {
         popup->m_noElasticity = true;
         popup->show();
     });
-    task->onProgress = [engine = engine](const ScriptExecutionStatus* status) {
+    task->onProgress = [engine = engine](const ScriptExecutionStatus*) {
         engine->updateScriptStatusForConsole();
     };
 }
@@ -411,6 +445,113 @@ void ScriptSelectorPopup::onClickCancel(CCObject* object) {
     auto status = engine->getStatus();
     if (status.type != STOPPED && status.asyncData.isAsync)
         status.asyncData.task->cancel();
+}
+
+void ScriptSelectorPopup::onRunInteractive(CCObject* object) {
+    std::string interactiveCode = R"==(
+local running = true
+function exit()
+    running = false
+    error("exited", 0)
+end
+
+local function compile(input)
+    --try expression first
+    local func, err = load("return " .. input, "=interactive")
+    if not func then
+        func, err = load(input, "=interactive")
+    end
+    return func, err
+end
+local function run(func)
+    local ret = table.pack(pcall(func))
+    if ret.n >= 2 then
+        print(table.unpack(ret, 2, ret.n))
+    end
+end
+local function isIncompleteStatement(err)
+    local i, j = string.find(err, "<eof>", 1, true)
+    if i and j == #err then
+        return true
+    end
+    return false
+end
+local function multiline(firstInput)
+    local str = firstInput
+    while true do
+        io.write(" .. > ")
+
+        local input = io.read()
+        if input == "" then return end
+
+        str = str .. "\n" .. input
+        local func, err = compile(str)
+
+        if func then
+            run(func)
+            return
+        else
+            if not isIncompleteStatement(err) then
+                print(err)
+                return
+            end
+        end
+    end
+end
+
+local specialNames = {
+    O = editor.getSelectedObject;
+    OA = function() return smart(editor.getSelectedObjects()) end;
+}
+setmetatable(_ENV, {
+    __index = function(_, name)
+        local specialFunc = specialNames[name]
+        if specialFunc then
+            return specialFunc()
+        end
+        return nil
+    end
+})
+CO = editor.createObject
+function CCO(id, ...)
+    local obj = editor.createObject(id, ...)
+    if obj then
+        obj.pos = editor.getViewGridCenter()
+        if id == 747 then
+            obj.orangePortal.y = obj.y + 100
+        end
+    end
+    return obj
+end
+P = point.new
+
+while running do
+    io.write("> ")
+
+    local input = io.read()
+    local func, err = compile(input)
+
+    if not func then
+        if isIncompleteStatement(err) then
+            multiline(input)
+        else
+            print(err)
+        end
+    else
+        run(func)
+    end
+
+    if not running then break end
+end)==";
+    auto task = LuaEngine::get()->executeAsync(editor, interactiveCode, "[interactive]", 1);
+    updateScriptStatus();
+
+    task->setOnResult([engine = engine](ScriptResult) {
+        engine->updateScriptStatusForConsole();
+    });
+    task->onProgress = [engine = engine](const ScriptExecutionStatus*) {
+        engine->updateScriptStatusForConsole();
+    };
 }
 
 void ScriptSelectorPopup::onConsoleText(const std::string& text) {

@@ -15,6 +15,17 @@
 		"geode.node-ids": ">=v1.20.0"
 	},
 	"settings": {
+		"title-interface": {
+			"type": "title",
+			"name": "Interface",
+			"description": "Settings relating to the user interface"
+		},
+		"interface-transparent-script-menu": {
+			"type": "bool",
+			"name": "Interface: Transparent Script Menu",
+			"description": "Changes the background of the script menu to a transparent rectangle, similar to the color/HSV overlay",
+			"default": false
+		},
 		"title-lua": {
 			"type": "title",
 			"name": "Lua Engine",
@@ -80,7 +91,13 @@
 		"lua-allow-debug-library": {
 			"type": "bool",
 			"name": "Lua: Allow Debug Library",
-			"description": "Controls or not to allow access to the debug.* library for Lua scripts, mostly useful for developing Geometron itself; do not enable unless you completely trust the scripts you are running, as this makes it incredibly easy to escape the sandbox!",
+			"description": "Controls whether or not to allow access to the debug.* library for Lua scripts, mostly useful for developing Geometron itself; do not enable unless you completely trust the scripts you are running, as this makes it incredibly easy to escape the sandbox!",
+			"default": false
+		},
+		"lua-allow-bytecode-loading": {
+			"type": "bool",
+			"name": "Lua: Allow Bytecode Loading",
+			"description": "Controls whether or not to allow Lua scripts to load arbitrary bytecode; do not enable unless you completely trust the scripts you are running, as Lua bytecode loading has been known to have major vulnerabilities!",
 			"default": false
 		},
 		"title-console": {
