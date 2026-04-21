@@ -17,7 +17,9 @@ using namespace geode::prelude;
 
 LuaEngine* LuaEngine::instance;
 
-void hook_abort() {
+//this was used i think for debugging some assembly stuff in Lua
+//not needed anymore in release builds
+/*void hook_abort() {
     log::error("abort called");
     __builtin_debugtrap();
 }
@@ -31,7 +33,7 @@ $execute {
         tulip::hook::TulipConvention::Cdecl
     );
     if (!result) log::error("could not hook abort: ", result.err().value());
-}
+}*/
 
 static inline int luaPanic(lua_State* L) {
     if (lua_isstring(L, -1)) {
