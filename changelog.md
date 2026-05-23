@@ -1,3 +1,8 @@
+# 1.0.5
+- Fixed the AdvRand target and spawn remap functions being completely broken
+- Made `GameObject:advRandSetTarget` and `GameObject:spawnSetRemap` take the index as the first argument instead of the last
+- Removed the pointless `support.md` file after pawPatoes brought it to my attention
+
 # 1.0.4
 - Re-enable macOS support as the crash no longer seems to occur
 

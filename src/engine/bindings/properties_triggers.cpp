@@ -1,3 +1,6 @@
+// ReSharper disable CppParameterMayBeConst
+// ReSharper disable CppLocalVariableMayBeConst
+// ReSharper disable CppDeclarationHidesUncapturedLocal
 #include "properties.hpp"
 
 void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertype<GameObject> gameObjectType) {
@@ -435,101 +438,109 @@ void addPropertiesForTriggers(sol::state_view& lua, EditorUI* self, sol::usertyp
         gameObjectType["advRandTargetCount"] = sol::readonly_property([](GameObject* object, sol::this_state lua) {
             return static_cast<int>(subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects.size());
         });
-        gameObjectType.set_function("advRandGetTarget", [](GameObject* object, int index, sol::this_state lua) -> sol::object {
+        gameObjectType.set_function("advRandGetTarget", [](GameObject* object, int index, sol::this_state lua) -> std::tuple<int, int> {
             {
-                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
-                if (index < 1 || index > chances.size()) goto oob;
-                auto chance = chances.at(index - 1);
-                return sol::make_object(lua, std::make_tuple(chance.m_groupID, chance.m_chance));
-            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+                auto chances = &subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index < 1 || index > chances->size()) goto oob;
+                auto chance = chances->at(index - 1);
+                return std::make_tuple(chance.m_groupID, chance.m_chance);
+            } oob: luaL_error(lua, "index %d out of bounds", index);
+            return std::make_tuple(-1, -1); //this should never happen
         });
-        gameObjectType.set_function("advRandSetTarget", [](GameObject* object, int groupID, int chanceValue, int index, sol::this_state lua) -> sol::object {
+        gameObjectType.set_function("advRandSetTarget", [](GameObject* object, int index, int groupID, int chanceValue, sol::this_state lua) {
             {
-                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
-                if (index < 1 || index > chances.size()) goto oob;
-                auto chance = chances.at(index - 1);
-                chance.m_groupID = groupID;
-                chance.m_chance = chanceValue;
-            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+                auto chances = &subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index < 1 || index > chances->size()) goto oob;
+                auto chance = &chances->at(index - 1);
+                chance->m_groupID = groupID;
+                chance->m_chance = chanceValue;
+                return;
+            } oob: luaL_error(lua, "index %d out of bounds", index);
         });
-        gameObjectType.set_function("advRandAddTarget", [](GameObject* object, int groupID, int chanceValue, sol::optional<int> index, sol::this_state lua) -> sol::object {
+        gameObjectType.set_function("advRandAddTarget", [](GameObject* object, int groupID, int chanceValue, sol::optional<int> index, sol::this_state lua) {
             {
                 auto chance = ChanceObject(groupID, chanceValue);
-                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                auto chances = &subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
                 if (index.has_value()) {
                     auto indexV = index.value();
-                    if (indexV < 1 || indexV > chances.size()) goto oob;
+                    if (indexV < 1 || indexV > chances->size()) goto oob;
 #if !defined(GEODE_IS_ANDROID)
-                    chances.insert(chances.cbegin() + (indexV - 1), chance);
+                    chances->insert(chances->cbegin() + (indexV - 1), chance);
 #else
-                    //for some reason vector.insert errors on sdk 4.10.0
+                    //for some reason vector.insert errors on sdk 5.7.1
                     //Geode/loader/include/Geode/c++stl/gnustl/vector.tcc:140:33: error:
                     //no member named '_M_const_cast' in 'geode::stl::__normal_iterator<const ChanceObject *, geode::stl::vector<ChanceObject>>'
                     //so i guess i will do it manually
-                    auto size = chances.size();
-                    chances.resize(size + 1);
+                    auto size = chances->size();
+                    chances->resize(size + 1);
                     for (auto i = size; i > indexV; i--)
-                        chances[i] = chances[i - 1];
-                    chances[indexV] = chance;
+                        (*chances)[i] = (*chances)[i - 1];
+                    (*chances)[indexV] = chance;
 #endif
                 } else
-                    chances.push_back(chance);
-            } oob: luaL_error(lua, "index %d out of bounds", index.value()); return sol::nil;
+                    chances->push_back(chance);
+                return;
+            } oob: luaL_error(lua, "index %d out of bounds", index.value());
         });
         gameObjectType.set_function("advRandRemoveTarget", [](GameObject* object, int index, sol::this_state lua) {
             {
-                auto chances = subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
-                if (index < 1 || index > chances.size()) goto oob;
-                chances.erase(chances.cbegin() + (index - 1));
-            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+                auto chances = &subclassCast<ChanceTriggerGameObject>(object, lua)->m_chanceObjects;
+                if (index < 1 || index > chances->size()) goto oob;
+                chances->erase(chances->cbegin() + (index - 1));
+                return;
+            } oob: luaL_error(lua, "index %d out of bounds", index);
         });
 
         gameObjectType["spawnRemapCount"] = sol::readonly_property([](GameObject* object, sol::this_state lua) {
             return static_cast<int>(subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects.size());
         });
-        gameObjectType.set_function("spawnGetRemap", [](GameObject* object, int index, sol::this_state lua) -> sol::object {
+        gameObjectType.set_function("spawnGetRemap", [](GameObject* object, int index, sol::this_state lua) -> std::tuple<int, int> {
             {
-                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
-                if (index < 1 || index > remaps.size()) goto oob;
-                auto remap = remaps.at(index - 1);
-                return sol::make_object(lua, std::make_tuple(remap.m_groupID, remap.m_chance)); //m_chance is dest group
-            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+                auto remaps = &subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index < 1 || index > remaps->size()) goto oob;
+                auto remap = remaps->at(index - 1);
+                return std::make_tuple(remap.m_groupID, remap.m_chance); //m_chance is dest group
+            } oob: luaL_error(lua, "index %d out of bounds", index);
+            return std::make_tuple(-1, -1); //this should never happen
         });
-        gameObjectType.set_function("spawnSetRemap", [](GameObject* object, int srcGroup, int destGroup, int index, sol::this_state lua) -> sol::object {
+        gameObjectType.set_function("spawnSetRemap", [](GameObject* object, int index, int srcGroup, int destGroup, sol::this_state lua) {
             {
-                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
-                if (index < 1 || index > remaps.size()) goto oob;
-                auto remap = remaps.at(index - 1);
-                remap.m_groupID = srcGroup;
-                remap.m_chance = destGroup;
-            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+                auto remaps = &subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index < 1 || index > remaps->size()) goto oob;
+                auto remap = &remaps->at(index - 1);
+                remap->m_groupID = srcGroup;
+                remap->m_chance = destGroup;
+                return;
+            } oob: luaL_error(lua, "index %d out of bounds", index);
         });
-        gameObjectType.set_function("spawnAddRemap", [](GameObject* object, int srcGroup, int destGroup, sol::optional<int> index, sol::this_state lua) -> sol::object {
+        gameObjectType.set_function("spawnAddRemap", [](GameObject* object, int srcGroup, int destGroup, sol::optional<int> index, sol::this_state lua) {
             {
                 auto remap = ChanceObject(srcGroup, destGroup);
-                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                auto remaps = &subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
                 if (index.has_value()) {
                     auto indexV = index.value();
-                    if (indexV < 1 || indexV > remaps.size()) goto oob;
+                    if (indexV < 1 || indexV > remaps->size()) goto oob;
 #if !defined(GEODE_IS_ANDROID)
-                    remaps.insert(remaps.cbegin() + (indexV - 1), remap);
+                    remaps->insert(remaps->cbegin() + (indexV - 1), remap);
 #else
-                    auto size = remaps.size();
-                    remaps.resize(size + 1);
+                    auto size = remaps->size();
+                    remaps->resize(size + 1);
                     for (auto i = size; i > indexV; i--)
-                        remaps[i] = remaps[i - 1];
-                    remaps[indexV] = remap;
+                        (*remaps)[i] = (*remaps)[i - 1];
+                    (*remaps)[indexV] = remap;
 #endif
                 } else
-                    remaps.push_back(remap);
-            } oob: luaL_error(lua, "index %d out of bounds", index.value()); return sol::nil;
+                    remaps->push_back(remap);
+                return;
+            } oob: luaL_error(lua, "index %d out of bounds", index.value());
         });
         gameObjectType.set_function("spawnRemoveRemap", [](GameObject* object, int index, sol::this_state lua) {
             {
-                auto remaps = subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
-                if (index < 1 || index > remaps.size()) goto oob;
-                remaps.erase(remaps.cbegin() + (index - 1));
-            } oob: luaL_error(lua, "index %d out of bounds", index); return sol::nil;
+                auto remaps = &subclassCast<SpawnTriggerGameObject>(object, lua)->m_remapObjects;
+                if (index < 1 || index > remaps->size()) goto oob;
+                remaps->erase(remaps->cbegin() + (index - 1));
+                return;
+            } oob: luaL_error(lua, "index %d out of bounds", index);
         });
     }
 }
