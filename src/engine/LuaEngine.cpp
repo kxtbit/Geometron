@@ -399,6 +399,8 @@ void LuaEngine::stateSetup() {
                 pushConstantString<"directory is not empty; specify 2nd argument true to delete recursively">(L);
                 return 2;
             }
+        } else {
+            fs::remove(realPath);
         }
 
         lua_pushboolean(L, true);

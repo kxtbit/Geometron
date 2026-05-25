@@ -1,3 +1,6 @@
+# 1.0.6
+- Fixed the `engine.removeFile` function being able to delete only directories instead of files
+
 # 1.0.5
 - Fixed the AdvRand target and spawn remap functions being completely broken
 - Made `GameObject:advRandSetTarget` and `GameObject:spawnSetRemap` take the index as the first argument instead of the last
