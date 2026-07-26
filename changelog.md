@@ -1,3 +1,6 @@
+# 1.0.7
+- Fixed a bug where the table returned by `editor.getGroupsParentOf` used indices starting at 0 instead of at 1
+
 # 1.0.6
 - Fixed the `engine.removeFile` function being able to delete only directories instead of files
 

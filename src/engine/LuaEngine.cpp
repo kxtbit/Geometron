@@ -611,7 +611,7 @@ void LuaEngine::editorSetup(EditorUI* editor) {
         CCArrayExt<CCInteger*> parentGroups =
             static_cast<CCArray*>(engine->editor->m_editorLayer->m_parentGroupIDs->objectForKey(object->m_uniqueID));
         for (int i = 0; i < parentGroups.size(); i++) {
-            output[i] = parentGroups[i]->getValue();
+            output[i + 1] = parentGroups[i]->getValue();
         }
         return output;
     });

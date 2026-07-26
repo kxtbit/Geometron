@@ -8,7 +8,7 @@
 	},
 	"id": "kxtbit.geometron",
 	"name": "Geometron",
-	"version": "v1.0.6",
+	"version": "v1.0.7",
 	"developer": "kxtbit",
 	"description": "Lua scripting engine for Geometry Dash",
 	"dependencies": {
